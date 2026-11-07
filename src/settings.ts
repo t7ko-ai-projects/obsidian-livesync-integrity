@@ -31,6 +31,8 @@ export interface IntegritySettings {
 	digestEnabled: boolean;
 	/** The scan the last digest was shown for. Local data, never uploaded. */
 	digestBaseline: DigestBaseline | null;
+	/** Last automatic show, so an unmarked digest pops up once a day. */
+	digestLastShownAt: number;
 }
 
 export const DEFAULT_SETTINGS: IntegritySettings = {
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: IntegritySettings = {
 	seenManifests: {},
 	digestEnabled: false,
 	digestBaseline: null,
+	digestLastShownAt: 0,
 };
 
 /** Key in Obsidian's device-local storage that holds this device's id. */

@@ -48,6 +48,61 @@ export function isEarlierLocalDay(savedAt: number, now: number): boolean {
 	return a.getDate() < b.getDate();
 }
 
+/** True when both instants fall on the same local calendar day. */
+export function isSameLocalDay(a: number, b: number): boolean {
+	return !isEarlierLocalDay(a, b) && !isEarlierLocalDay(b, a);
+}
+
+/** What the daily auto-show rule looks at; all of it lives in data.json. */
+export interface DigestState {
+	digestEnabled: boolean;
+	digestBaseline: DigestBaseline | null;
+	/** When the digest was last shown by itself on load. */
+	digestLastShownAt: number;
+}
+
+/**
+ * The automatic digest is due when enabled and either no baseline exists yet
+ * (the first run only records one) or the baseline is from an earlier local
+ * day and the digest has not popped up yet today. Viewing never moves the
+ * baseline, so without the second condition an unmarked digest would return
+ * at every restart.
+ */
+export function isAutoDigestDue(state: DigestState, now: number): boolean {
+	if (!state.digestEnabled) {
+		return false;
+	}
+	if (state.digestBaseline === null) {
+		return true;
+	}
+	return (
+		isEarlierLocalDay(state.digestBaseline.savedAt, now) &&
+		!isSameLocalDay(state.digestLastShownAt, now)
+	);
+}
+
+/** Showing the digest: only the automatic show is recorded; the baseline
+ * stays. Mutates and returns `state`. */
+export function noteDigestShown<T extends DigestState>(
+	state: T,
+	now: number,
+	manual: boolean,
+): T {
+	if (!manual) {
+		state.digestLastShownAt = now;
+	}
+	return state;
+}
+
+/** "Mark as seen": the live scan becomes the baseline. Mutates `state`. */
+export function markDigestSeen<T extends DigestState>(
+	state: T,
+	scan: DigestBaseline,
+): T {
+	state.digestBaseline = scan;
+	return state;
+}
+
 function deviceLabel(m: Manifest): string {
 	return m.deviceName || m.deviceId;
 }

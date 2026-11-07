@@ -82,9 +82,12 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   other device whose manifest is newer than the baseline and carries the same hash at that
   path (or lacks a deleted file). The digest never uploads anything; it only reads the
   other manifests through `fetchRemoteManifests` (shared with the check, same caps), and a
-  failed fetch degrades to an unattributed list. It is due when enabled and the baseline
-  is missing or from an earlier local calendar day (`isEarlierLocalDay`), 30 s after
-  layout ready. Paths are rendered as text nodes, never HTML.
+  failed fetch degrades to an unattributed list. Showing the digest never moves the
+  baseline: only the first run (no baseline) and the modal's "Mark as seen" button do
+  (`markDigestSeen`); closing or clicking an entry keeps it. The automatic show is due
+  (`isAutoDigestDue`) when enabled and the baseline is missing, or is from an earlier local
+  calendar day and `digestLastShownAt` (set by automatic shows only, `noteDigestShown`) is
+  not today, 30 s after layout ready. Paths are rendered as text nodes, never HTML.
 - **Digest history links use two LiveSync command ids**, `obsidian-livesync:livesync-history`
   (document history of the active file; the entry opens the file first) and
   `obsidian-livesync:livesync-filehistory` (picker over all documents, used for deleted

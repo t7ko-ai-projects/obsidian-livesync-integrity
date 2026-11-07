@@ -1,4 +1,4 @@
-import { type App, Modal, Notice, setTooltip } from "obsidian";
+import { type App, ButtonComponent, Modal, Notice, setTooltip } from "obsidian";
 import { DIGEST_KINDS, digestGroup, type DigestEntry } from "../digest";
 
 /** LiveSync command ids (checked against v1.0.45, commit 24a1bfc1). */
@@ -69,6 +69,9 @@ export class DigestModal extends Modal {
 		private readonly entries: DigestEntry[],
 		private readonly since: number,
 		private readonly notes: string[],
+		/** Saves the live scan as the baseline; closing without it keeps the
+		 * old baseline so the same digest can be reopened. */
+		private readonly onMarkSeen: () => Promise<void>,
 	) {
 		super(app);
 	}
@@ -78,9 +81,16 @@ export class DigestModal extends Modal {
 		contentEl.empty();
 		this.setTitle("Daily digest");
 		contentEl.createEl("p", {
-			text: `${this.entries.length} change(s) since ${new Date(this.since).toLocaleString()}. Click an entry to open the file and its LiveSync history.`,
+			text: `${this.entries.length} change(s) since ${new Date(this.since).toLocaleString()}. Click an entry to open the file and its LiveSync history. Closing keeps this digest; "Mark as seen" starts the next one from now.`,
 			cls: "t7li-muted",
 		});
+		new ButtonComponent(contentEl.createDiv({ cls: "t7li-digest-actions" }))
+			.setButtonText("Mark as seen")
+			.setCta()
+			.onClick(() => {
+				this.close();
+				void this.onMarkSeen();
+			});
 		if (this.entries.length === 0) {
 			contentEl.createEl("p", { text: "No changes." });
 		}

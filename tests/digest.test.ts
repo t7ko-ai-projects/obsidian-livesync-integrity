@@ -5,7 +5,12 @@ import { utf8 } from "../src/bytes";
 import {
 	computeDigest,
 	digestGroup,
+	isAutoDigestDue,
 	isEarlierLocalDay,
+	isSameLocalDay,
+	markDigestSeen,
+	noteDigestShown,
+	type DigestState,
 	type DigestBaseline,
 } from "../src/digest";
 import { runDigest } from "../src/digest-run";
@@ -154,6 +159,60 @@ test("isEarlierLocalDay compares local calendar days", () => {
 	assert.equal(isEarlierLocalDay(noon, noon + 12 * HOUR), true);
 	assert.equal(isEarlierLocalDay(noon, noon + 40 * 24 * HOUR), true);
 	assert.equal(isEarlierLocalDay(noon + 24 * HOUR, noon), false);
+});
+
+test("showing the digest keeps the baseline; marking as seen replaces it", () => {
+	const old: DigestBaseline = {
+		savedAt: T0,
+		files: { "a.md": e("a", 1, T0) },
+	};
+	const scan: DigestBaseline = {
+		savedAt: T0 + 30 * HOUR,
+		files: { "b.md": e("b", 2, T0 + HOUR) },
+	};
+	const state: DigestState = {
+		digestEnabled: true,
+		digestBaseline: old,
+		digestLastShownAt: 0,
+	};
+	noteDigestShown(state, T0 + 30 * HOUR, true);
+	assert.equal(state.digestBaseline, old, "manual show keeps the baseline");
+	assert.equal(state.digestLastShownAt, 0, "manual show is not recorded");
+	noteDigestShown(state, T0 + 30 * HOUR, false);
+	assert.equal(state.digestBaseline, old, "automatic show keeps it too");
+	assert.equal(state.digestLastShownAt, T0 + 30 * HOUR);
+	markDigestSeen(state, scan);
+	assert.equal(state.digestBaseline, scan);
+});
+
+test("the automatic digest is due once per day until marked as seen", () => {
+	const day = (n: number, hour: number) =>
+		new Date(2026, 10, 7 + n, hour, 0, 0).getTime();
+	const state: DigestState = {
+		digestEnabled: true,
+		digestBaseline: { savedAt: day(0, 12), files: {} },
+		digestLastShownAt: 0,
+	};
+	assert.equal(isAutoDigestDue(state, day(0, 20)), false, "same day");
+	assert.equal(isAutoDigestDue(state, day(1, 9)), true, "next day");
+	noteDigestShown(state, day(1, 9), false);
+	assert.equal(isAutoDigestDue(state, day(1, 18)), false, "shown today");
+	assert.equal(isAutoDigestDue(state, day(2, 9)), true, "back the day after");
+	markDigestSeen(state, { savedAt: day(2, 9), files: {} });
+	assert.equal(isAutoDigestDue(state, day(2, 10)), false, "fresh baseline");
+	assert.equal(isAutoDigestDue(state, day(3, 10)), true);
+	state.digestEnabled = false;
+	assert.equal(isAutoDigestDue(state, day(3, 10)), false, "disabled");
+	assert.equal(
+		isAutoDigestDue(
+			{ digestEnabled: true, digestBaseline: null, digestLastShownAt: 0 },
+			day(0, 12),
+		),
+		true,
+		"no baseline: the first run records one",
+	);
+	assert.equal(isSameLocalDay(day(0, 1), day(0, 23)), true);
+	assert.equal(isSameLocalDay(day(0, 23), day(1, 1)), false);
 });
 
 test("sizes and deltas are formatted for people", () => {

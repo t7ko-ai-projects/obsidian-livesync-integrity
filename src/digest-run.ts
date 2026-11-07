@@ -23,7 +23,8 @@ export interface DigestRunOptions {
 export interface DigestResult {
 	/** Null on the first run, when there was no baseline to diff against. */
 	entries: DigestEntry[] | null;
-	/** The scan to save as the next baseline. */
+	/** The live scan: saved as the baseline on the first run, otherwise only
+	 * when the user marks the digest as seen. */
 	baseline: DigestBaseline;
 	/** Why attribution may be incomplete: unreadable manifests and the like. */
 	notes: string[];

@@ -6,7 +6,7 @@ import {
 	mismatchKeys,
 	type IntegrityReport,
 } from "./compare";
-import { isEarlierLocalDay } from "./digest";
+import { isAutoDigestDue, markDigestSeen, noteDigestShown } from "./digest";
 import { runDigest } from "./digest-run";
 import { readLiveSyncCredentials } from "./livesync-credentials";
 import { compileExclusions, isValidDeviceId } from "./manifest";
@@ -69,7 +69,7 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		this.addSettingTab(new IntegritySettingTab(this.app, this));
 
 		this.app.workspace.onLayoutReady(() => {
-			if (this.isDigestDue(Date.now())) {
+			if (isAutoDigestDue(this.settings, Date.now())) {
 				window.setTimeout(
 					() => void this.showDigest(false),
 					DIGEST_DELAY_MS,
@@ -218,19 +218,9 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		}
 	}
 
-	/** Enabled, and no baseline yet or one from an earlier local day. */
-	isDigestDue(now: number): boolean {
-		const s = this.settings;
-		if (!s.digestEnabled) {
-			return false;
-		}
-		return (
-			s.digestBaseline === null ||
-			isEarlierLocalDay(s.digestBaseline.savedAt, now)
-		);
-	}
-
-	/** Scan, diff against the baseline, show the modal, save the new baseline. */
+	/** Scan, diff against the baseline, show the modal. The baseline moves only
+	 * on the first run (nothing to show yet) or when the user marks the digest
+	 * as seen; closing the window leaves it alone. */
 	async showDigest(manual: boolean): Promise<void> {
 		if (this.running) {
 			if (manual) {
@@ -262,19 +252,26 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 					progress?.setMessage(`Daily digest: ${message}`),
 			});
 			const since = this.settings.digestBaseline?.savedAt ?? 0;
-			this.settings.digestBaseline = result.baseline;
-			await this.saveSettings();
+			noteDigestShown(this.settings, Date.now(), manual);
 			if (result.entries === null) {
+				markDigestSeen(this.settings, result.baseline);
+				await this.saveSettings();
 				new BaselineRecordedModal(
 					this.app,
 					Object.keys(result.baseline.files).length,
 				).open();
 			} else {
+				await this.saveSettings();
 				new DigestModal(
 					this.app,
 					result.entries,
 					since,
 					result.notes,
+					async () => {
+						markDigestSeen(this.settings, result.baseline);
+						await this.saveSettings();
+						new Notice("Digest marked as seen");
+					},
 				).open();
 			}
 		} catch (error) {

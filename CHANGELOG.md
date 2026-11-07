@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- The daily digest no longer resets its baseline when shown. "Mark as seen" in the digest
+  window saves the new baseline; closing the window keeps the digest, and the automatic
+  window comes back once a day until it is marked as seen.
+
 ## 0.1.1
 
 - Fix "Not usable: Self-hosted LiveSync is not loaded or has no settings" with LiveSync

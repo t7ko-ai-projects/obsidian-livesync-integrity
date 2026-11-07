@@ -85,16 +85,22 @@ Off by default; turn on **Daily digest** in the settings. On the first start of 
 (local time, about 30 seconds after Obsidian opens, once the vault is indexed), and
 whenever the command "Show daily digest" runs, the plugin scans the vault with the same
 keyed hash the check uses and shows a window with the files **renamed or moved**, **added**,
-**modified** and **deleted** since the digest was last shown. Each entry shows the path,
+**modified** and **deleted** since the digest was last marked as seen. Each entry shows the path,
 the size (and the size change for a modified file), the modification time and, where
 another device's manifest newer than the last digest carries the same change, the name of
-that device. A rename is a deleted path whose content reappeared under a new path. Entries
-are sorted newest first within each group.
+that device. A rename is a deleted path whose content reappeared under a new path, so it is
+detected only when the content is unchanged; a note that was moved and edited shows as
+deleted plus added. Entries are sorted newest first within each group.
 
 Click an entry to open the file and LiveSync's document history (its revision slider and
 diff) for it. A deleted file cannot be opened, so its entry opens LiveSync's file history
 picker instead, where you pick the file yourself. Without LiveSync the entry just opens
 the file and a notice says history is unavailable.
+
+Viewing the digest changes nothing: close it with X or Escape and the same digest can be
+reopened any number of times. **Mark as seen** saves the current scan as the new baseline,
+so the next digest starts from now. The automatic daily window appears once a day (it does
+not return at every restart) until the digest is marked as seen.
 
 The digest compares scans, not events: it does not matter how many days the vault was
 closed, and the first run only records the baseline and says so. The baseline (path, hash,
