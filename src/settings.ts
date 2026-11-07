@@ -1,4 +1,5 @@
 import type { IntegrityReport } from "./compare";
+import type { DigestBaseline } from "./digest";
 
 /**
  * Settings kept in data.json. The device id is NOT here: data.json can be
@@ -26,6 +27,10 @@ export interface IntegritySettings {
 	knownMismatchKeys: string[];
 	/** Newest manifest time seen per other device, to notice rollbacks. */
 	seenManifests: Record<string, number>;
+	/** Show a digest of vault changes on the first load of each day. */
+	digestEnabled: boolean;
+	/** The scan the last digest was shown for. Local data, never uploaded. */
+	digestBaseline: DigestBaseline | null;
 }
 
 export const DEFAULT_SETTINGS: IntegritySettings = {
@@ -41,6 +46,8 @@ export const DEFAULT_SETTINGS: IntegritySettings = {
 	lastReport: null,
 	knownMismatchKeys: [],
 	seenManifests: {},
+	digestEnabled: false,
+	digestBaseline: null,
 };
 
 /** Key in Obsidian's device-local storage that holds this device's id. */

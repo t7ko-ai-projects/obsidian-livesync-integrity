@@ -1,4 +1,4 @@
-import { type App, PluginSettingTab, Setting } from "obsidian";
+import { type App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { readLiveSyncCredentials } from "../livesync-credentials";
 import type LiveSyncIntegrityPlugin from "../main";
 
@@ -137,6 +137,29 @@ export class IntegritySettingTab extends PluginSettingTab {
 						s.notifyOnNewMismatch = value;
 						await save();
 					}),
+			);
+
+		new Setting(containerEl)
+			.setName("Daily digest")
+			.setDesc(
+				"On the first start of each day, show the files added, modified, renamed or deleted since the last digest. Only a window; nothing is written to the vault or the bucket.",
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(s.digestEnabled).onChange(async (value) => {
+					s.digestEnabled = value;
+					await save();
+				}),
+			)
+			.addButton((button) =>
+				button.setButtonText("Show now").onClick(() => {
+					void this.plugin.showDigest(true);
+				}),
+			)
+			.addButton((button) =>
+				button.setButtonText("Reset baseline").onClick(async () => {
+					await this.plugin.resetDigestBaseline();
+					new Notice("Digest baseline cleared");
+				}),
 			);
 
 		const seen = Object.keys(s.seenManifests);

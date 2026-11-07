@@ -6,6 +6,8 @@ import {
 	mismatchKeys,
 	type IntegrityReport,
 } from "./compare";
+import { isEarlierLocalDay } from "./digest";
+import { runDigest } from "./digest-run";
 import { readLiveSyncCredentials } from "./livesync-credentials";
 import { compileExclusions, isValidDeviceId } from "./manifest";
 import { isRunDue } from "./schedule";
@@ -15,6 +17,7 @@ import {
 	generateDeviceId,
 	type IntegritySettings,
 } from "./settings";
+import { BaselineRecordedModal, DigestModal } from "./ui/digest-modal";
 import { ReportModal } from "./ui/report-modal";
 import { IntegritySettingTab } from "./ui/settings-tab";
 
@@ -22,6 +25,8 @@ const TICK_MS = 60_000;
 const MINUTE = 60_000;
 /** A remote manifest older than this many intervals is stale. */
 const STALE_INTERVALS = 3;
+/** Wait after load before the daily digest scans, so the vault is indexed. */
+const DIGEST_DELAY_MS = 30_000;
 
 /** Never hash the configuration folder, whatever the user's patterns say. */
 function configFolderPattern(configDir: string): RegExp {
@@ -56,9 +61,20 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 			name: "Show integrity report",
 			callback: () => this.showReport(),
 		});
+		this.addCommand({
+			id: "show-digest",
+			name: "Show daily digest",
+			callback: () => void this.showDigest(true),
+		});
 		this.addSettingTab(new IntegritySettingTab(this.app, this));
 
 		this.app.workspace.onLayoutReady(() => {
+			if (this.isDigestDue(Date.now())) {
+				window.setTimeout(
+					() => void this.showDigest(false),
+					DIGEST_DELAY_MS,
+				);
+			}
 			const touch = () => {
 				this.lastChangeAt = Date.now();
 			};
@@ -200,6 +216,82 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 				15_000,
 			);
 		}
+	}
+
+	/** Enabled, and no baseline yet or one from an earlier local day. */
+	isDigestDue(now: number): boolean {
+		const s = this.settings;
+		if (!s.digestEnabled) {
+			return false;
+		}
+		return (
+			s.digestBaseline === null ||
+			isEarlierLocalDay(s.digestBaseline.savedAt, now)
+		);
+	}
+
+	/** Scan, diff against the baseline, show the modal, save the new baseline. */
+	async showDigest(manual: boolean): Promise<void> {
+		if (this.running) {
+			if (manual) {
+				new Notice(
+					"Integrity check is already running; try again later",
+				);
+			}
+			return;
+		}
+		const creds = readLiveSyncCredentials(this.app);
+		if (!creds.ok) {
+			if (manual) {
+				new Notice(`Daily digest skipped: ${creds.reason}`, 10_000);
+			}
+			return;
+		}
+		const { regexes } = compileExclusions(this.settings.excludePatterns);
+		regexes.push(configFolderPattern(this.app.vault.configDir));
+		this.running = true;
+		const progress = manual
+			? new Notice("Daily digest: starting", 0)
+			: null;
+		try {
+			const result = await runDigest(this.app, creds.creds, {
+				deviceId: this.deviceId,
+				exclusions: regexes,
+				baseline: this.settings.digestBaseline,
+				onProgress: (message) =>
+					progress?.setMessage(`Daily digest: ${message}`),
+			});
+			const since = this.settings.digestBaseline?.savedAt ?? 0;
+			this.settings.digestBaseline = result.baseline;
+			await this.saveSettings();
+			if (result.entries === null) {
+				new BaselineRecordedModal(
+					this.app,
+					Object.keys(result.baseline.files).length,
+				).open();
+			} else {
+				new DigestModal(
+					this.app,
+					result.entries,
+					since,
+					result.notes,
+				).open();
+			}
+		} catch (error) {
+			new Notice(
+				`Daily digest failed: ${error instanceof Error ? error.message : String(error)}`,
+				10_000,
+			);
+		} finally {
+			progress?.hide();
+			this.running = false;
+		}
+	}
+
+	/** Drop the digest baseline; the next digest records a new one. */
+	async resetDigestBaseline(): Promise<void> {
+		this.settings.digestBaseline = null;
+		await this.saveSettings();
 	}
 
 	/** Clear the rollback memory, e.g. after a device was retired. */

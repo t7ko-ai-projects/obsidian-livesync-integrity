@@ -2,6 +2,11 @@
 
 ## 0.1.0
 
+- Daily digest (off by default): a modal with the files renamed, added, modified and
+  deleted since the digest was last shown, attributed to the device whose manifest carries
+  the change, with click-through to LiveSync's document history. Scan-based baseline in
+  `data.json`; nothing written to the vault or the bucket.
+
 - Hardening after a security review: device id kept in device-local storage, device id
   bound to the manifest ciphertext, padded manifests, caps on manifest size, count and
   listing pages, stale, rolled-back and vanished manifests reported as problems, failed

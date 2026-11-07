@@ -28,10 +28,12 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
 | `src/check.ts`                        | One run: hash, upload own manifest, list, download, compare.            |
 | `src/manifest.ts`                     | Manifest format, exclusions, build, encrypt/decrypt/validate.           |
 | `src/compare.ts`                      | Pure comparison and mismatch counting/keys.                             |
+| `src/remote-manifests.ts`             | List and download the other devices' manifests under the caps.          |
+| `src/digest.ts`, `src/digest-run.ts`  | Daily digest: pure diff against the baseline, and the scan/fetch run.   |
 | `src/crypto/manifest-crypto.ts`       | PBKDF2 key derivation, HMAC file hash, AES-GCM container.               |
 | `src/s3/sigv4.ts`, `src/s3/client.ts` | SigV4 signer (WebCrypto) and PUT/GET/LIST over `requestUrl`.            |
 | `src/livesync-credentials.ts`         | Reads and validates LiveSync's settings.                                |
-| `src/settings.ts`, `src/ui/`          | Plugin settings, settings tab, report modal.                            |
+| `src/settings.ts`, `src/ui/`          | Plugin settings, settings tab, report and digest modals.                |
 | `tests/`                              | Node test runner through esbuild (`test.config.mjs`), Obsidian stubbed. |
 | `scripts/release-github.mjs`          | BRAT-compatible GitHub release (tag = version, three assets).           |
 
@@ -74,6 +76,23 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   with own-property checks (`fileEntry`) so a note named `constructor` compares right.
 - **Report state** (`lastReport`, `knownMismatchKeys`) lives in `data.json`; a notice fires
   only for mismatch keys not seen in the previous report.
+- **Daily digest is scan-based and local-only.** `digestBaseline` in `data.json` holds the
+  last scan (path, keyed hash, size, mtime); `computeDigest` diffs the live scan against it,
+  pairs a deleted hash with an added one as a rename, and attributes a change to the first
+  other device whose manifest is newer than the baseline and carries the same hash at that
+  path (or lacks a deleted file). The digest never uploads anything; it only reads the
+  other manifests through `fetchRemoteManifests` (shared with the check, same caps), and a
+  failed fetch degrades to an unattributed list. It is due when enabled and the baseline
+  is missing or from an earlier local calendar day (`isEarlierLocalDay`), 30 s after
+  layout ready. Paths are rendered as text nodes, never HTML.
+- **Digest history links use two LiveSync command ids**, `obsidian-livesync:livesync-history`
+  (document history of the active file; the entry opens the file first) and
+  `obsidian-livesync:livesync-filehistory` (picker over all documents, used for deleted
+  files). Checked against LiveSync v1.0.45, commit 24a1bfc1,
+  `src/modules/features/ModuleObsidianDocumentHistory.ts`. They are run through
+  `app.commands.executeCommandById` (undocumented internal, probed before use); when
+  either is missing the entry still opens the file and a notice says so. Nothing else of
+  LiveSync's internals is touched.
 
 ## Checks before a commit
 

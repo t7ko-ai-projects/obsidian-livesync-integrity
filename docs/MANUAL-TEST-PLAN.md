@@ -38,6 +38,11 @@ under `_integrity/`, but LiveSync's own maintenance actions used below rewrite j
 | 16 | Set A's interval to 1 h, wait over 3 h without running A, run in B. | A's section says stale; status bar in B shows "problems". |
 | 17 | Delete A's manifest object from the bucket and run in B. | "Problems" says A's manifest disappeared; "Forget all" in B's settings clears it. |
 | 18 | With the bucket unreachable (wrong endpoint in a throwaway LiveSync profile), let a scheduled run fail. | One failure notice; no new run for an hour (check that the vault is not rehashed every minute). |
+| 19 | Turn on "Daily digest" in A; run "Show daily digest". | A short "Baseline recorded: N files" window; no bucket writes (the manifest object's timestamp is unchanged). |
+| 20 | In A: add `d1.md`, edit `keep.md`, delete `gone.md`, move `old.md` to `sub/new.md`; in B edit `fromB.md` and run B's integrity check; wait for A to sync; run "Show daily digest" in A. | Groups: Renamed (`old.md -> sub/new.md`), Added, Modified (`keep.md` with a size delta, `fromB.md` marked "from B"), Deleted. Newest first inside each group. |
+| 21 | Click `keep.md` in the digest; then reopen the digest and click `gone.md`. | The modal closes, `keep.md` opens with LiveSync's document history; for `gone.md` LiveSync's file history picker opens (tooltip says to pick the file). |
+| 22 | Disable LiveSync, run the command (it is skipped with a reason); re-enable, then disable only LiveSync's commands by testing with a vault where LiveSync has no history module (or rename the command id in a throwaway copy) and click an entry. | Entry opens the file and a notice says document history is unavailable. |
+| 23 | Close Obsidian, change the PC clock to the next day (or wait a day), reopen A. | About 30 s after start the digest window appears by itself; it does not reappear on a second restart the same day. The command still works at any time. |
 
 ## After the tests
 

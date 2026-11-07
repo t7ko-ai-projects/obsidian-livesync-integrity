@@ -17,3 +17,6 @@
 .t7li-bad {
 	color: var(--text-error);
 }
+.t7li-digest-entry {
+	cursor: pointer;
+}

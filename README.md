@@ -48,6 +48,7 @@ publishes no manifest and is simply absent from the reports.
 - **Command "Run integrity check now"** runs a check immediately.
 - **Command "Show integrity report"** opens the last report. The status bar shows the
   mismatch count of the last report.
+- **Command "Show daily digest"** opens the digest of vault changes (see below).
 
 A scheduled check also runs when the plugin loads after the interval has passed (for a PC
 that is not opened every day), once the vault has been quiet for the quiet period.
@@ -77,6 +78,29 @@ makes a result suspect rather than a plain mismatch:
 - manifests that could not be decrypted, were too large, or were not manifests at all.
 
 "No other device" is also not an all-clear: nothing was compared.
+
+### Daily digest
+
+Off by default; turn on **Daily digest** in the settings. On the first start of each day
+(local time, about 30 seconds after Obsidian opens, once the vault is indexed), and
+whenever the command "Show daily digest" runs, the plugin scans the vault with the same
+keyed hash the check uses and shows a window with the files **renamed or moved**, **added**,
+**modified** and **deleted** since the digest was last shown. Each entry shows the path,
+the size (and the size change for a modified file), the modification time and, where
+another device's manifest newer than the last digest carries the same change, the name of
+that device. A rename is a deleted path whose content reappeared under a new path. Entries
+are sorted newest first within each group.
+
+Click an entry to open the file and LiveSync's document history (its revision slider and
+diff) for it. A deleted file cannot be opened, so its entry opens LiveSync's file history
+picker instead, where you pick the file yourself. Without LiveSync the entry just opens
+the file and a notice says history is unavailable.
+
+The digest compares scans, not events: it does not matter how many days the vault was
+closed, and the first run only records the baseline and says so. The baseline (path, hash,
+size, mtime per file) lives in the plugin's `data.json`; "Reset baseline" in the settings
+drops it. The digest writes nothing to the vault or the bucket; it reads the other devices'
+manifests only to attribute changes.
 
 ### Repairing a mismatch
 
@@ -133,6 +157,10 @@ such as `(a+)+$` can take exponential time on some paths and stall the check.
 - After a failed scheduled run (offline, bucket down) the plugin waits an hour, or one
   interval if that is shorter, before trying again, and shows the failure notice once.
 - The plugin does not compare LiveSync's hidden-file or plugin-settings sync.
+- The digest's history links depend on two LiveSync command ids
+  (`obsidian-livesync:livesync-history`, `obsidian-livesync:livesync-filehistory`, checked
+  against LiveSync v1.0.45). If a LiveSync update renames them, the entries still open the
+  file and a notice says history is unavailable.
 
 ## Development
 

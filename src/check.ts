@@ -3,21 +3,11 @@ import type { App } from "obsidian";
 import { compareManifests, type IntegrityReport } from "./compare";
 import { deriveHashKey } from "./crypto/manifest-crypto";
 import type { LiveSyncCredentials } from "./livesync-credentials";
-import {
-	buildManifest,
-	deviceIdFromKey,
-	manifestKey,
-	MANIFEST_FOLDER,
-	parseManifest,
-	serializeManifest,
-	type Manifest,
-} from "./manifest";
+import { buildManifest, manifestKey, serializeManifest } from "./manifest";
+import { fetchRemoteManifests } from "./remote-manifests";
 import { S3Client, type RequestFn } from "./s3/client";
 
-/** A manifest object larger than this is not downloaded. */
-export const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
-/** More manifests than this are not compared; the rest is reported. */
-export const MAX_MANIFESTS = 64;
+export { MAX_MANIFEST_BYTES, MAX_MANIFESTS } from "./remote-manifests";
 
 export interface CheckOptions {
 	deviceId: string;
@@ -32,10 +22,6 @@ export interface CheckOptions {
 	now?: number;
 	request?: RequestFn;
 	onProgress?: (message: string) => void;
-}
-
-function describe(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 export async function runIntegrityCheck(
@@ -65,58 +51,17 @@ export async function runIntegrityCheck(
 	const ownKey = manifestKey(creds.bucketPrefix, options.deviceId);
 	await client.put(ownKey, await serializeManifest(local, creds.passphrase));
 
-	options.onProgress?.("Listing manifests");
-	const folder = `${creds.bucketPrefix}${MANIFEST_FOLDER}`;
-	const listing = await client.list(folder);
-	if (listing.malformed > 0) {
-		report.errors.push(
-			`${listing.malformed} listing entr${listing.malformed === 1 ? "y" : "ies"} could not be read`,
-		);
-	}
-	const candidates = listing.objects
-		.map((object) => ({
-			object,
-			deviceId: deviceIdFromKey(creds.bucketPrefix, object.key),
-		}))
-		.filter(
-			(c): c is { object: typeof c.object; deviceId: string } =>
-				c.deviceId !== undefined && c.deviceId !== options.deviceId,
-		)
-		.sort((a, b) => (a.deviceId < b.deviceId ? -1 : 1));
-	const ignored = listing.objects.length - candidates.length - 1;
-	if (ignored > 0) {
-		report.errors.push(
-			`${ignored} object(s) under ${MANIFEST_FOLDER} are not manifests and were ignored`,
-		);
-	}
-	if (candidates.length > MAX_MANIFESTS) {
-		report.errors.push(
-			`${candidates.length} other manifests found; only the first ${MAX_MANIFESTS} were compared`,
-		);
-		candidates.length = MAX_MANIFESTS;
-	}
+	const remotes = await fetchRemoteManifests(
+		client,
+		creds,
+		options.deviceId,
+		options.onProgress,
+	);
+	report.errors.push(...remotes.errors);
 
-	const seen = new Set<string>();
-	for (const { object, deviceId } of candidates) {
-		seen.add(deviceId);
+	for (const remote of remotes.manifests) {
+		const deviceId = remote.deviceId;
 		options.onProgress?.(`Comparing with ${deviceId}`);
-		if (object.size > MAX_MANIFEST_BYTES) {
-			report.errors.push(
-				`${deviceId}: manifest is ${object.size} bytes, above the ${MAX_MANIFEST_BYTES} byte limit`,
-			);
-			continue;
-		}
-		let remote: Manifest;
-		try {
-			remote = await parseManifest(
-				await client.get(object.key, MAX_MANIFEST_BYTES),
-				creds.passphrase,
-				deviceId,
-			);
-		} catch (error) {
-			report.errors.push(`${deviceId}: ${describe(error)}`);
-			continue;
-		}
 		const before = options.previouslySeen?.[deviceId];
 		if (before !== undefined && remote.createdAt < before) {
 			report.errors.push(
@@ -136,7 +81,7 @@ export async function runIntegrityCheck(
 		report.devices.push(device);
 	}
 	for (const deviceId of Object.keys(options.previouslySeen ?? {})) {
-		if (!seen.has(deviceId)) {
+		if (!remotes.listed.has(deviceId)) {
 			report.errors.push(
 				`${deviceId}: manifest seen before has disappeared from the bucket`,
 			);
