@@ -1,0 +1,19 @@
+.t7li-report-section {
+	margin-bottom: 1em;
+}
+.t7li-report-section h3 {
+	margin-bottom: 0.3em;
+}
+.t7li-report-list {
+	font-family: var(--font-monospace);
+	font-size: var(--font-smaller);
+	max-height: 14em;
+	overflow: auto;
+	padding-left: 1.2em;
+}
+.t7li-muted {
+	color: var(--text-muted);
+}
+.t7li-bad {
+	color: var(--text-error);
+}

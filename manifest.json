@@ -1,0 +1,9 @@
+{
+	"id": "t7-livesync-integrity",
+	"name": "LiveSync Integrity (t7)",
+	"version": "0.1.0",
+	"minAppVersion": "1.7.2",
+	"description": "Compares file hashes across the devices sharing one Self-hosted LiveSync S3 bucket and reports files that silently differ.",
+	"author": "t7ko",
+	"isDesktopOnly": false
+}
