@@ -1,11 +1,15 @@
 /** Pure comparison of the local manifest with one remote manifest. */
-import type { Manifest } from "./manifest";
+import { fileEntry, type Manifest } from "./manifest";
 
 export interface DeviceReport {
 	deviceId: string;
 	deviceName: string;
+	/** When the remote manifest was created, ms since the epoch. */
+	manifestCreatedAt: number;
 	/** Age of the remote manifest at comparison time, ms. */
 	manifestAgeMs: number;
+	/** The manifest is older than the stale limit: its mismatches are suspect. */
+	stale: boolean;
 	/** Paths present on both sides with different hashes. */
 	differing: string[];
 	/** Paths present only in the local vault. */
@@ -20,13 +24,16 @@ export interface IntegrityReport {
 	createdAt: number;
 	localFileCount: number;
 	devices: DeviceReport[];
-	/** Human-readable problems that stopped part of the check. */
+	/** Human-readable problems that stopped part of the check or that make
+	 * the result suspect (stale, rolled back or vanished manifests). */
 	errors: string[];
 }
 
 export interface CompareOptions {
 	now: number;
 	graceMs: number;
+	/** A remote manifest older than this is marked stale. */
+	staleMs?: number;
 }
 
 /**
@@ -42,10 +49,13 @@ export function compareManifests(
 	const cutoff =
 		Math.min(local.createdAt, remote.createdAt) - options.graceMs;
 	const settled = (mtime: number) => mtime < cutoff;
+	const ageMs = Math.max(0, options.now - remote.createdAt);
 	const report: DeviceReport = {
 		deviceId: remote.deviceId,
 		deviceName: remote.deviceName,
-		manifestAgeMs: Math.max(0, options.now - remote.createdAt),
+		manifestCreatedAt: remote.createdAt,
+		manifestAgeMs: ageMs,
+		stale: options.staleMs !== undefined && ageMs > options.staleMs,
 		differing: [],
 		onlyHere: [],
 		onlyThere: [],
@@ -56,8 +66,8 @@ export function compareManifests(
 		...Object.keys(remote.files),
 	]);
 	for (const path of [...paths].sort()) {
-		const here = local.files[path];
-		const there = remote.files[path];
+		const here = fileEntry(local.files, path);
+		const there = fileEntry(remote.files, path);
 		if (here && there) {
 			if (here.h === there.h) {
 				continue;
@@ -90,6 +100,11 @@ export function mismatchCount(report: IntegrityReport): number {
 			n + d.differing.length + d.onlyHere.length + d.onlyThere.length,
 		0,
 	);
+}
+
+/** True when something other than mismatches needs attention. */
+export function hasProblems(report: IntegrityReport): boolean {
+	return report.errors.length > 0 || report.devices.some((d) => d.stale);
 }
 
 /** Stable keys for every mismatch, to tell new ones from already seen ones. */

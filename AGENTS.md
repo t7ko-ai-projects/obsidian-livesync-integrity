@@ -46,15 +46,32 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   other device may simply not have scanned since the change. Mtimes decide only "settled",
   never which side is right (LiveSync preserves them, but Android may not).
 - **Hash is HMAC keyed from the passphrase** (PBKDF2 with a fixed salt so all devices
-  agree), and the manifest is AES-256-GCM under a PBKDF2 key with a random salt and IV
-  prefixed (`[1][salt 16][iv 12][ct]`). A manifest that fails to decrypt is reported as a
-  problem for that device and skipped.
+  agree), and the manifest is AES-256-GCM under a PBKDF2 key (600k iterations) with a
+  random salt and IV prefixed (`[1][salt 16][iv 12][ct]`) and the device id as AES-GCM
+  additional data. The plaintext is padded to 4 KiB multiples. A manifest that fails to
+  decrypt, names another device inside, or is not a manifest is reported as a problem
+  for that device and skipped.
+- **Device id is device-local** (`app.loadLocalStorage`/`saveLocalStorage`, key in
+  `settings.ts`), validated against `^[0-9a-f]{16}$` on load and regenerated otherwise.
+  Never move it into `data.json`: LiveSync's customisation sync could copy it.
+- **Hostile-bucket limits** (`check.ts`, `client.ts`): size cap 16 MB checked against the
+  listing before GET and against the body after, at most 64 manifests, at most 100 listing
+  pages, a repeated continuation token aborts, only `<16 hex>.json` directly under
+  `_integrity/` is a manifest, undecodable listing entries are counted and skipped, and
+  S3 error bodies are reduced to `<Code>` plus 80 chars of `<Message>` (ASCII only).
+- **Suspect results are "problems"**, not silence: stale manifests (older than 3
+  intervals), a manifest whose createdAt went backwards against `seenManifests`, a
+  device that vanished, and "no other device" all show in the status bar and report.
+- **Failed runs back off** (`schedule.ts`): `lastAttemptAt` is written at every start;
+  a retry waits `min(interval, 1 h)`; the scheduled-run failure notice repeats only when
+  the message changes.
 - **Scheduling survives missed days**: on every minute tick, a run is due when
   `now - lastRunAt >= interval`, and it waits until the vault has been quiet (no vault
   event) for the quiet period; plugin load counts as a change so LiveSync's startup sync
   settles first.
 - **Config folder always excluded** through `vault.configDir` (the ESLint rule forbids a
-  literal `.obsidian`); `vault.getFiles()` does not list it anyway.
+  literal `.obsidian`); `vault.getFiles()` does not list it anyway. File maps are read
+  with own-property checks (`fileEntry`) so a note named `constructor` compares right.
 - **Report state** (`lastReport`, `knownMismatchKeys`) lives in `data.json`; a notice fires
   only for mismatch keys not seen in the previous report.
 

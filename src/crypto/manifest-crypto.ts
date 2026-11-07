@@ -1,13 +1,16 @@
 /**
  * Keys derived from the LiveSync E2EE passphrase, and the encrypted manifest
- * container: [version 1][salt 16][iv 12][AES-256-GCM ciphertext].
+ * container: [version 1][salt 16][iv 12][AES-256-GCM ciphertext]. The device
+ * id is bound to the ciphertext as additional authenticated data, so a
+ * manifest copied under another device's key name does not decrypt.
  */
 import { concat, randomBytes, toArrayBuffer, utf8 } from "../bytes";
 
 const FORMAT_VERSION = 1;
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
-const PBKDF2_ITERATIONS = 100_000;
+/** OWASP's 2023 figure for PBKDF2-HMAC-SHA256; a few derivations per check. */
+const PBKDF2_ITERATIONS = 600_000;
 /** Fixed salt so every device derives the same file-hash key. */
 const HASH_KEY_SALT = "t7-livesync-integrity/hmac/v1";
 
@@ -70,16 +73,22 @@ async function aesKey(
 	);
 }
 
+/** Encrypt with the context string (the device id) as authenticated data. */
 export async function encryptBytes(
 	passphrase: string,
 	plaintext: Uint8Array,
+	context: string,
 ): Promise<Uint8Array> {
 	const salt = randomBytes(SALT_LENGTH);
 	const iv = randomBytes(IV_LENGTH);
 	const key = await aesKey(passphrase, salt);
 	const ciphertext = new Uint8Array(
 		await crypto.subtle.encrypt(
-			{ name: "AES-GCM", iv: toArrayBuffer(iv) },
+			{
+				name: "AES-GCM",
+				iv: toArrayBuffer(iv),
+				additionalData: toArrayBuffer(utf8(context)),
+			},
 			key,
 			toArrayBuffer(plaintext),
 		),
@@ -92,6 +101,7 @@ export class ManifestFormatError extends Error {}
 export async function decryptBytes(
 	passphrase: string,
 	container: Uint8Array,
+	context: string,
 ): Promise<Uint8Array> {
 	const headerLength = 1 + SALT_LENGTH + IV_LENGTH;
 	if (container.length <= headerLength) {
@@ -108,14 +118,18 @@ export async function decryptBytes(
 	try {
 		return new Uint8Array(
 			await crypto.subtle.decrypt(
-				{ name: "AES-GCM", iv: toArrayBuffer(iv) },
+				{
+					name: "AES-GCM",
+					iv: toArrayBuffer(iv),
+					additionalData: toArrayBuffer(utf8(context)),
+				},
 				key,
 				toArrayBuffer(container.subarray(headerLength)),
 			),
 		);
 	} catch {
 		throw new ManifestFormatError(
-			"cannot decrypt the manifest (different passphrase or damaged file)",
+			"cannot decrypt the manifest (different passphrase, wrong device key, or damaged file)",
 		);
 	}
 }

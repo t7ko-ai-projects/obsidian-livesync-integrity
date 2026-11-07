@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMPTY_PAYLOAD_HASH, encodeKeyPath, sign } from "../src/s3/sigv4";
 import {
+	describeErrorBody,
+	MAX_LIST_PAGES,
 	parseCustomHeaders,
 	parseListResponse,
 	S3Client,
@@ -105,10 +107,91 @@ test("parses a ListObjectsV2 page with entities and continuation", () => {
 			["p/_integrity/c.json", 3],
 		],
 	);
+	assert.equal(page.malformed, 0);
 	assert.equal(
 		parseListResponse("<ListBucketResult></ListBucketResult>").nextToken,
 		undefined,
 	);
+});
+
+test("an undecodable listing entry is skipped, not fatal", () => {
+	const xml =
+		"<R><EncodingType>url</EncodingType>" +
+		"<Contents><Key>bad&#99999999999;</Key><Size>1</Size></Contents>" +
+		"<Contents><Key>bad%E0%A4%A</Key><Size>1</Size></Contents>" +
+		"<Contents><Key>ok%20key</Key><Size>x</Size></Contents>" +
+		"<Contents><Key>ok%20key</Key><Size>2</Size></Contents></R>";
+	const page = parseListResponse(xml);
+	assert.deepEqual(
+		page.objects.map((o) => [o.key, o.size]),
+		[["ok key", 2]],
+	);
+	assert.equal(page.malformed, 3);
+});
+
+test("error bodies are reduced to code and a short message", () => {
+	assert.equal(
+		describeErrorBody(
+			"<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message><StringToSign>AWS4-HMAC-SHA256 secret</StringToSign></Error>",
+		),
+		"SignatureDoesNotMatch: The request signature we calculated does not match the signature you provided. C",
+	);
+	assert.equal(
+		describeErrorBody("<Error><Code>AccessDenied</Code></Error>"),
+		"AccessDenied",
+	);
+	assert.equal(
+		describeErrorBody("<html>nginx 502</html>"),
+		"no error code in the response",
+	);
+	assert.equal(
+		describeErrorBody(
+			"<Error><Code>X\u0007y</Code><Message>é</Message></Error>",
+		),
+		"X?y: ?",
+	);
+});
+
+test("listing stops on a repeated continuation token or too many pages", async () => {
+	const stuck = new S3Client(
+		{
+			endpoint: "https://s3.example.com",
+			region: "eu",
+			bucket: "vault",
+			accessKey: "a",
+			secretKey: "s",
+			forcePathStyle: true,
+			customHeaders: {},
+		},
+		async () => ({
+			status: 200,
+			text: "<R><IsTruncated>true</IsTruncated><NextContinuationToken>same</NextContinuationToken></R>",
+			arrayBuffer: new ArrayBuffer(0),
+		}),
+	);
+	await assert.rejects(stuck.list("p/"), /did not advance/);
+	let pages = 0;
+	const endless = new S3Client(
+		{
+			endpoint: "https://s3.example.com",
+			region: "eu",
+			bucket: "vault",
+			accessKey: "a",
+			secretKey: "s",
+			forcePathStyle: true,
+			customHeaders: {},
+		},
+		async () => {
+			pages += 1;
+			return {
+				status: 200,
+				text: `<R><IsTruncated>true</IsTruncated><NextContinuationToken>t${pages}</NextContinuationToken></R>`,
+				arrayBuffer: new ArrayBuffer(0),
+			};
+		},
+	);
+	await assert.rejects(endless.list("p/"), /more than 100 pages/);
+	assert.equal(pages, MAX_LIST_PAGES);
 });
 
 test("sends signed requests and follows continuation tokens", async () => {
@@ -140,9 +223,9 @@ test("sends signed requests and follows continuation tokens", async () => {
 			return { status: 200, text, arrayBuffer: new ArrayBuffer(0) };
 		},
 	);
-	const objects = await client.list("pre/_integrity/");
+	const listing = await client.list("pre/_integrity/");
 	assert.deepEqual(
-		objects.map((o) => o.key),
+		listing.objects.map((o) => o.key),
 		["k1", "k2"],
 	);
 	assert.equal(
@@ -175,9 +258,33 @@ test("reports S3 errors with status and operation", async () => {
 		},
 		async () => ({
 			status: 403,
-			text: "<Error>denied</Error>",
+			text: "<Error><Code>AccessDenied</Code><Message>denied</Message></Error>",
 			arrayBuffer: new ArrayBuffer(0),
 		}),
 	);
-	await assert.rejects(client.get("k"), /S3 GET answered 403: <Error>denied/);
+	await assert.rejects(
+		client.get("k"),
+		/^Error: S3 GET answered 403 \(AccessDenied: denied\)$/,
+	);
+});
+
+test("get rejects a body above the size limit", async () => {
+	const client = new S3Client(
+		{
+			endpoint: "https://s3.example.com",
+			region: "eu",
+			bucket: "vault",
+			accessKey: "a",
+			secretKey: "s",
+			forcePathStyle: true,
+			customHeaders: {},
+		},
+		async () => ({
+			status: 200,
+			text: "",
+			arrayBuffer: new ArrayBuffer(10),
+		}),
+	);
+	await assert.rejects(client.get("k", 9), /larger than 9 bytes/);
+	assert.equal((await client.get("k", 10)).length, 10);
 });

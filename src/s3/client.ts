@@ -39,13 +39,33 @@ export type RequestFn = (params: RequestUrlParam) => Promise<{
 	text: string;
 }>;
 
+/** Listing pages beyond this count are not followed. */
+export const MAX_LIST_PAGES = 100;
+const MAX_MESSAGE_LENGTH = 80;
+
+/**
+ * Only the S3 error code and a short message leave the response body: an
+ * error body can echo the signed request, custom headers included.
+ */
+export function describeErrorBody(text: string): string {
+	const code = /<Code>([^<]{1,64})<\/Code>/.exec(text)?.[1];
+	const message = /<Message>([^<]*)<\/Message>/.exec(text)?.[1];
+	if (!code) {
+		return "no error code in the response";
+	}
+	const clean = (s: string) => s.replace(/[^\x20-\x7e]/g, "?");
+	return message
+		? `${clean(code)}: ${clean(message).slice(0, MAX_MESSAGE_LENGTH)}`
+		: clean(code);
+}
+
 export class S3Error extends Error {
 	constructor(
 		public readonly operation: string,
 		public readonly status: number,
 		detail: string,
 	) {
-		super(`S3 ${operation} answered ${status}: ${detail}`);
+		super(`S3 ${operation} answered ${status} (${detail})`);
 	}
 }
 
@@ -66,15 +86,22 @@ export function parseCustomHeaders(text: string): Record<string, string> {
 	return out;
 }
 
+function codePoint(n: number): string {
+	if (!Number.isFinite(n) || n < 0 || n > 0x10ffff) {
+		throw new RangeError("invalid character reference");
+	}
+	return String.fromCodePoint(n);
+}
+
 function decodeXml(text: string): string {
 	return text
 		.replace(/&lt;/g, "<")
 		.replace(/&gt;/g, ">")
 		.replace(/&quot;/g, '"')
 		.replace(/&apos;/g, "'")
-		.replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+		.replace(/&#(\d+);/g, (_, n: string) => codePoint(Number(n)))
 		.replace(/&#x([0-9a-fA-F]+);/g, (_, n: string) =>
-			String.fromCodePoint(parseInt(n, 16)),
+			codePoint(parseInt(n, 16)),
 		)
 		.replace(/&amp;/g, "&");
 }
@@ -84,30 +111,52 @@ function tag(xml: string, name: string): string | undefined {
 	return match ? decodeXml(match[1] ?? "") : undefined;
 }
 
-/** Parse a ListObjectsV2 response; URL-encoded keys are decoded. */
-export function parseListResponse(xml: string): {
+export interface ListPage {
 	objects: S3Object[];
 	nextToken?: string;
-} {
+	/** Entries that could not be decoded and were left out. */
+	malformed: number;
+}
+
+/** Parse a ListObjectsV2 page; an undecodable entry is counted, not fatal. */
+export function parseListResponse(xml: string): ListPage {
 	const objects: S3Object[] = [];
-	const encoded = tag(xml, "EncodingType") === "url";
+	let malformed = 0;
+	let encoded = false;
+	try {
+		encoded = tag(xml, "EncodingType") === "url";
+	} catch {
+		malformed += 1;
+	}
 	for (const match of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
 		const block = match[1] ?? "";
-		let key = tag(block, "Key") ?? "";
-		if (encoded) {
-			key = decodeURIComponent(key);
+		try {
+			let key = tag(block, "Key") ?? "";
+			if (encoded) {
+				key = decodeURIComponent(key);
+			}
+			const size = Number(tag(block, "Size") ?? 0);
+			if (!key || !Number.isFinite(size)) {
+				throw new Error("bad entry");
+			}
+			objects.push({
+				key,
+				size,
+				lastModified: tag(block, "LastModified") ?? "",
+			});
+		} catch {
+			malformed += 1;
 		}
-		objects.push({
-			key,
-			size: Number(tag(block, "Size") ?? 0),
-			lastModified: tag(block, "LastModified") ?? "",
-		});
 	}
-	const truncated = tag(xml, "IsTruncated") === "true";
-	return {
-		objects,
-		nextToken: truncated ? tag(xml, "NextContinuationToken") : undefined,
-	};
+	let nextToken: string | undefined;
+	try {
+		if (tag(xml, "IsTruncated") === "true") {
+			nextToken = tag(xml, "NextContinuationToken");
+		}
+	} catch {
+		malformed += 1;
+	}
+	return { objects, nextToken, malformed };
 }
 
 export class S3Client {
@@ -178,7 +227,7 @@ export class S3Client {
 			throw new S3Error(
 				operation,
 				response.status,
-				response.text.slice(0, 300),
+				describeErrorBody(response.text),
 			);
 		}
 		return {
@@ -194,24 +243,43 @@ export class S3Client {
 		});
 	}
 
-	async get(key: string): Promise<Uint8Array> {
-		return (await this.call("GET", "GET", key, {})).body;
+	/** Download one object; a body above maxBytes is rejected after download
+	 * (requestUrl cannot stream), so callers check the listed size first. */
+	async get(key: string, maxBytes = Infinity): Promise<Uint8Array> {
+		const body = (await this.call("GET", "GET", key, {})).body;
+		if (body.length > maxBytes) {
+			throw new Error(`object is larger than ${maxBytes} bytes`);
+		}
+		return body;
 	}
 
 	/** Every object under the prefix, following continuation tokens. */
-	async list(prefix: string): Promise<S3Object[]> {
+	async list(prefix: string): Promise<ListPage> {
 		const objects: S3Object[] = [];
+		let malformed = 0;
 		let token: string | undefined;
-		do {
+		for (let page = 0; ; page += 1) {
+			if (page >= MAX_LIST_PAGES) {
+				throw new Error(
+					`listing has more than ${MAX_LIST_PAGES} pages; giving up`,
+				);
+			}
 			const query: Record<string, string> = { "list-type": "2", prefix };
 			if (token) {
 				query["continuation-token"] = token;
 			}
 			const response = await this.call("LIST", "GET", "", query);
-			const page = parseListResponse(response.text);
-			objects.push(...page.objects);
-			token = page.nextToken;
-		} while (token);
-		return objects;
+			const parsed = parseListResponse(response.text);
+			objects.push(...parsed.objects);
+			malformed += parsed.malformed;
+			if (!parsed.nextToken) {
+				break;
+			}
+			if (parsed.nextToken === token) {
+				throw new Error("listing did not advance (repeated token)");
+			}
+			token = parsed.nextToken;
+		}
+		return { objects, malformed };
 	}
 }

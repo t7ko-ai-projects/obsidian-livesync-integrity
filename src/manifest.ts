@@ -12,6 +12,10 @@ export const MANIFEST_FORMAT = "t7-livesync-integrity/1";
 /** Folder under LiveSync's bucket prefix. The underscore keeps LiveSync's
  * journal receiver away from it (it skips keys starting with "_"). */
 export const MANIFEST_FOLDER = "_integrity/";
+/** Device ids are 8 random bytes in hex; nothing else may name a manifest. */
+export const DEVICE_ID_PATTERN = /^[0-9a-f]{16}$/;
+/** Plaintext is padded to this multiple so sizes do not leak file counts. */
+export const MANIFEST_PAD_BYTES = 4096;
 
 export interface ManifestEntry {
 	/** HMAC-SHA256 of the content, hex. */
@@ -30,8 +34,40 @@ export interface Manifest {
 	files: Record<string, ManifestEntry>;
 }
 
+export function isValidDeviceId(id: unknown): id is string {
+	return typeof id === "string" && DEVICE_ID_PATTERN.test(id);
+}
+
 export function manifestKey(bucketPrefix: string, deviceId: string): string {
+	if (!isValidDeviceId(deviceId)) {
+		throw new Error("invalid device id");
+	}
 	return `${bucketPrefix}${MANIFEST_FOLDER}${deviceId}.json`;
+}
+
+/** The device id named by a manifest key, or undefined for any other key. */
+export function deviceIdFromKey(
+	bucketPrefix: string,
+	key: string,
+): string | undefined {
+	const folder = `${bucketPrefix}${MANIFEST_FOLDER}`;
+	if (!key.startsWith(folder)) {
+		return undefined;
+	}
+	const name = key.slice(folder.length);
+	const id = name.endsWith(".json") ? name.slice(0, -5) : "";
+	return isValidDeviceId(id) ? id : undefined;
+}
+
+/** Own-property lookup, so a file named "constructor" is not confused with
+ * Object.prototype on the side that lacks it. */
+export function fileEntry(
+	files: Record<string, ManifestEntry>,
+	path: string,
+): ManifestEntry | undefined {
+	return Object.prototype.hasOwnProperty.call(files, path)
+		? files[path]
+		: undefined;
 }
 
 /** Compile the user's exclusion patterns; invalid ones are reported, not used. */
@@ -78,7 +114,9 @@ export async function buildManifest(
 		.getFiles()
 		.filter((f: TFile) => !isExcluded(f.path, options.exclusions))
 		.sort((a, b) => (a.path < b.path ? -1 : 1));
-	const entries: Record<string, ManifestEntry> = {};
+	const entries: Record<string, ManifestEntry> = Object.create(
+		null,
+	) as Record<string, ManifestEntry>;
 	let done = 0;
 	for (const file of files) {
 		const content = await app.vault.readBinary(file);
@@ -99,11 +137,26 @@ export async function buildManifest(
 	};
 }
 
+/** JSON plus trailing spaces up to a multiple of MANIFEST_PAD_BYTES. */
+export function padManifestJson(json: string): Uint8Array {
+	const bytes = utf8(json);
+	const padded = new Uint8Array(
+		Math.ceil(bytes.length / MANIFEST_PAD_BYTES) * MANIFEST_PAD_BYTES,
+	);
+	padded.fill(0x20);
+	padded.set(bytes);
+	return padded;
+}
+
 export async function serializeManifest(
 	manifest: Manifest,
 	passphrase: string,
 ): Promise<Uint8Array> {
-	return encryptBytes(passphrase, utf8(JSON.stringify(manifest)));
+	return encryptBytes(
+		passphrase,
+		padManifestJson(JSON.stringify(manifest)),
+		manifest.deviceId,
+	);
 }
 
 function isEntry(value: unknown): value is ManifestEntry {
@@ -118,14 +171,22 @@ function isEntry(value: unknown): value is ManifestEntry {
 	);
 }
 
+/**
+ * Decrypt and validate a manifest that was stored under the key of
+ * `expectedDeviceId`; the id is the authenticated context, and the inner id
+ * must match it too.
+ */
 export async function parseManifest(
 	container: Uint8Array,
 	passphrase: string,
+	expectedDeviceId: string,
 ): Promise<Manifest> {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(
-			fromUtf8(await decryptBytes(passphrase, container)),
+			fromUtf8(
+				await decryptBytes(passphrase, container, expectedDeviceId),
+			),
 		);
 	} catch (error) {
 		if (error instanceof ManifestFormatError) {
@@ -150,6 +211,11 @@ export async function parseManifest(
 		m.files === null
 	) {
 		throw new ManifestFormatError("manifest has missing fields");
+	}
+	if (m.deviceId !== expectedDeviceId) {
+		throw new ManifestFormatError(
+			"manifest names a different device than its key",
+		);
 	}
 	for (const entry of Object.values(m.files as Record<string, unknown>)) {
 		if (!isEntry(entry)) {

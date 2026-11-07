@@ -39,13 +39,18 @@ export class IntegritySettingTab extends PluginSettingTab {
 			.setName("Connection")
 			.setDesc(
 				creds.ok
-					? `Using LiveSync's bucket "${creds.creds.bucket}" (prefix "${creds.creds.bucketPrefix}"). Credentials are read from LiveSync at run time and never stored here.`
+					? `Using LiveSync's bucket "${creds.creds.bucket}" (prefix "${creds.creds.bucketPrefix}"). Credentials are read from LiveSync at run time and never stored here.` +
+							(creds.creds.endpoint.startsWith("http:")
+								? " Warning: the endpoint is plain HTTP; manifests are encrypted, but the request signatures and bucket names travel unencrypted."
+								: "")
 					: `Not usable: ${creds.reason}`,
 			);
 
 		new Setting(containerEl)
 			.setName("Device name")
-			.setDesc(`Shown to other devices next to the id ${s.deviceId}.`)
+			.setDesc(
+				`Shown to other devices next to the id ${this.plugin.deviceId} (kept on this device only).`,
+			)
 			.addText((text) =>
 				text.setValue(s.deviceName).onChange(async (value) => {
 					s.deviceName = value.trim();
@@ -106,7 +111,7 @@ export class IntegritySettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Excluded paths")
 			.setDesc(
-				"One regular expression per line, tested against the vault path.",
+				"One regular expression per line, tested against the vault path. Keep them simple: a pattern with nested repetition such as (a+)+$ can stall the check.",
 			)
 			.addTextArea((area) =>
 				area
@@ -132,6 +137,21 @@ export class IntegritySettingTab extends PluginSettingTab {
 						s.notifyOnNewMismatch = value;
 						await save();
 					}),
+			);
+
+		const seen = Object.keys(s.seenManifests);
+		const knownDevices = new Setting(containerEl)
+			.setName("Known devices")
+			.setDesc(
+				seen.length
+					? `${seen.length} other device(s) seen so far. A device whose manifest disappears or goes back in time is reported; forget them after retiring a device.`
+					: "No other device seen yet.",
+			)
+			.addButton((button) =>
+				button.setButtonText("Forget all").onClick(async () => {
+					await this.plugin.forgetDevices();
+					knownDevices.setDesc("No other device seen yet.");
+				}),
 			);
 
 		new Setting(containerEl)

@@ -43,8 +43,8 @@ export class ReportModal extends Modal {
 		});
 		if (r.devices.length === 0) {
 			contentEl.createEl("p", {
-				text: "No other device has published a manifest yet. Install the plugin on the other devices and let it run once.",
-				cls: "t7li-muted",
+				text: "No other device has published a manifest, so nothing was compared. Install the plugin on the other devices and let it run once; if it already ran there, its manifest is missing from the bucket.",
+				cls: "t7li-bad",
 			});
 		}
 		for (const device of r.devices) {
@@ -67,8 +67,12 @@ export class ReportModal extends Modal {
 			: device.deviceId;
 		section.createEl("h3", { text: label });
 		section.createEl("div", {
-			text: `Manifest from ${formatAge(device.manifestAgeMs)}; ${device.pending} file(s) still inside the grace window.`,
-			cls: "t7li-muted",
+			text:
+				`Manifest from ${formatAge(device.manifestAgeMs)}; ${device.pending} file(s) still inside the grace window.` +
+				(device.stale
+					? " Stale: that device has not checked for a long time, so these results compare against an old snapshot."
+					: ""),
+			cls: device.stale ? "t7li-bad" : "t7li-muted",
 		});
 		const groups: [string, string[]][] = [
 			["Different content", device.differing],

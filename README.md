@@ -67,6 +67,17 @@ Files changed more recently are counted as "still inside the grace window" and w
 up in a later check if they stay different. A file deleted on one device shows as "only on
 that device" until the other device syncs the deletion and publishes a new manifest.
 
+The report's "Problems" list and the status bar's "problems" flag cover everything that
+makes a result suspect rather than a plain mismatch:
+
+- a manifest older than three check intervals (that device has stopped checking);
+- a manifest that went back in time since the last check, or a device whose manifest
+  disappeared from the bucket (someone restored or deleted bucket objects; use "Forget
+  all" under Known devices after retiring a device);
+- manifests that could not be decrypted, were too large, or were not manifests at all.
+
+"No other device" is also not an all-clear: nothing was compared.
+
 ### Repairing a mismatch
 
 The plugin only reports; it changes nothing. To repair, look at both copies of the file
@@ -80,15 +91,19 @@ it) on that device makes LiveSync send it again.
 
 One regular expression per line, tested against the vault-relative path. The vault's
 configuration folder (`.obsidian` by default) is always excluded; LiveSync's hidden-file
-sync is not checked by this plugin.
+sync is not checked by this plugin. Keep patterns simple: a pattern with nested repetition
+such as `(a+)+$` can take exponential time on some paths and stall the check.
 
 ## How it works
 
 - File hash: HMAC-SHA256 of the file content, keyed by a key derived from the LiveSync
   passphrase (PBKDF2, fixed salt), so hashes cannot be checked without the passphrase.
 - Manifest: JSON with the device id, name, creation time and, per file, hash, size and
-  modification time. It is encrypted with AES-256-GCM under a key derived from the
-  passphrase by PBKDF2 with a random 16-byte salt and a random 12-byte IV; the container is
+  modification time, padded with spaces to a multiple of 4 KiB so the object size does not
+  reveal the file count. It is encrypted with AES-256-GCM under a key derived from the
+  passphrase by PBKDF2 (600 000 iterations) with a random 16-byte salt and a random
+  12-byte IV; the device id is the authenticated associated data, so a manifest copied
+  under another device's key does not decrypt. The container is
   `[version 1][salt][iv][ciphertext]`.
 - Bucket layout: `<bucketPrefix>_integrity/<deviceId>.json`. LiveSync's journal receiver
   ignores keys that start with `_`, which keeps the manifests out of its journal replay.
@@ -97,7 +112,14 @@ sync is not checked by this plugin.
 - Transport: AWS Signature Version 4 implemented with WebCrypto, sent through Obsidian's
   `requestUrl`, so it works on Android and does not need CORS on the bucket. Path-style and
   virtual-host addressing and LiveSync's custom headers are honoured.
-- Device id: 8 random bytes, generated once and kept in the plugin's `data.json`.
+- Device id: 8 random bytes in hex, generated once and kept in Obsidian's device-local
+  storage, not in `data.json`, so LiveSync's customisation sync cannot copy it to another
+  device (two devices with one id would each ignore the other's manifest).
+- Limits: manifests above 16 MB are not downloaded, at most 64 other manifests are
+  compared, a listing is followed for at most 100 pages, and only keys named
+  `<16 hex digits>.json` directly under `_integrity/` count as manifests. S3 error
+  responses are reduced to their error code and a short message before they reach a
+  notice or the report.
 
 ## Limits
 
@@ -108,6 +130,8 @@ sync is not checked by this plugin.
   file. Keep the interval reasonable; each check costs one PUT, one LIST and one GET per
   other device.
 - Modification times decide only whether a file has settled, never which side is right.
+- After a failed scheduled run (offline, bucket down) the plugin waits an hour, or one
+  interval if that is shorter, before trying again, and shows the failure notice once.
 - The plugin does not compare LiveSync's hidden-file or plugin-settings sync.
 
 ## Development

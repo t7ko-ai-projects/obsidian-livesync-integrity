@@ -79,12 +79,19 @@ export function credentialsFromSettings(settings: unknown): CredentialsResult {
 		};
 	}
 	const endpoint = (s.endpoint as string).trim();
+	let protocol: string;
 	try {
-		new URL(endpoint);
+		protocol = new URL(endpoint).protocol;
 	} catch {
 		return {
 			ok: false,
 			reason: `LiveSync endpoint is not a URL: ${endpoint}`,
+		};
+	}
+	if (protocol !== "https:" && protocol !== "http:") {
+		return {
+			ok: false,
+			reason: `LiveSync endpoint must be http(s), not ${protocol}`,
 		};
 	}
 	return {

@@ -5,19 +5,30 @@ import { deriveHashKey } from "./crypto/manifest-crypto";
 import type { LiveSyncCredentials } from "./livesync-credentials";
 import {
 	buildManifest,
-	MANIFEST_FOLDER,
+	deviceIdFromKey,
 	manifestKey,
+	MANIFEST_FOLDER,
 	parseManifest,
 	serializeManifest,
 	type Manifest,
 } from "./manifest";
 import { S3Client, type RequestFn } from "./s3/client";
 
+/** A manifest object larger than this is not downloaded. */
+export const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
+/** More manifests than this are not compared; the rest is reported. */
+export const MAX_MANIFESTS = 64;
+
 export interface CheckOptions {
 	deviceId: string;
 	deviceName: string;
 	exclusions: RegExp[];
 	graceMs: number;
+	/** A remote manifest older than this is marked stale. */
+	staleMs?: number;
+	/** Newest manifest time seen per device in earlier checks. A device that
+	 * vanished or went backwards is reported. */
+	previouslySeen?: Record<string, number>;
 	now?: number;
 	request?: RequestFn;
 	onProgress?: (message: string) => void;
@@ -56,25 +67,80 @@ export async function runIntegrityCheck(
 
 	options.onProgress?.("Listing manifests");
 	const folder = `${creds.bucketPrefix}${MANIFEST_FOLDER}`;
-	const objects = (await client.list(folder)).filter(
-		(o) => o.key !== ownKey && o.key.endsWith(".json"),
-	);
-	for (const object of objects) {
-		const name = object.key.slice(folder.length);
-		options.onProgress?.(`Comparing with ${name}`);
+	const listing = await client.list(folder);
+	if (listing.malformed > 0) {
+		report.errors.push(
+			`${listing.malformed} listing entr${listing.malformed === 1 ? "y" : "ies"} could not be read`,
+		);
+	}
+	const candidates = listing.objects
+		.map((object) => ({
+			object,
+			deviceId: deviceIdFromKey(creds.bucketPrefix, object.key),
+		}))
+		.filter(
+			(c): c is { object: typeof c.object; deviceId: string } =>
+				c.deviceId !== undefined && c.deviceId !== options.deviceId,
+		)
+		.sort((a, b) => (a.deviceId < b.deviceId ? -1 : 1));
+	const ignored = listing.objects.length - candidates.length - 1;
+	if (ignored > 0) {
+		report.errors.push(
+			`${ignored} object(s) under ${MANIFEST_FOLDER} are not manifests and were ignored`,
+		);
+	}
+	if (candidates.length > MAX_MANIFESTS) {
+		report.errors.push(
+			`${candidates.length} other manifests found; only the first ${MAX_MANIFESTS} were compared`,
+		);
+		candidates.length = MAX_MANIFESTS;
+	}
+
+	const seen = new Set<string>();
+	for (const { object, deviceId } of candidates) {
+		seen.add(deviceId);
+		options.onProgress?.(`Comparing with ${deviceId}`);
+		if (object.size > MAX_MANIFEST_BYTES) {
+			report.errors.push(
+				`${deviceId}: manifest is ${object.size} bytes, above the ${MAX_MANIFEST_BYTES} byte limit`,
+			);
+			continue;
+		}
 		let remote: Manifest;
 		try {
 			remote = await parseManifest(
-				await client.get(object.key),
+				await client.get(object.key, MAX_MANIFEST_BYTES),
 				creds.passphrase,
+				deviceId,
 			);
 		} catch (error) {
-			report.errors.push(`${name}: ${describe(error)}`);
+			report.errors.push(`${deviceId}: ${describe(error)}`);
 			continue;
 		}
-		report.devices.push(
-			compareManifests(local, remote, { now, graceMs: options.graceMs }),
-		);
+		const before = options.previouslySeen?.[deviceId];
+		if (before !== undefined && remote.createdAt < before) {
+			report.errors.push(
+				`${deviceId}: manifest went backwards in time (was ${new Date(before).toISOString()}, now ${new Date(remote.createdAt).toISOString()}); someone restored an old copy`,
+			);
+		}
+		const device = compareManifests(local, remote, {
+			now,
+			graceMs: options.graceMs,
+			staleMs: options.staleMs,
+		});
+		if (device.stale) {
+			report.errors.push(
+				`${deviceId}: manifest is ${Math.round(device.manifestAgeMs / 3_600_000)} h old; that device has not checked for a long time`,
+			);
+		}
+		report.devices.push(device);
+	}
+	for (const deviceId of Object.keys(options.previouslySeen ?? {})) {
+		if (!seen.has(deviceId)) {
+			report.errors.push(
+				`${deviceId}: manifest seen before has disappeared from the bucket`,
+			);
+		}
 	}
 	report.devices.sort((a, b) => a.manifestAgeMs - b.manifestAgeMs);
 	return report;
