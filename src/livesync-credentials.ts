@@ -18,13 +18,37 @@ export interface LiveSyncCredentials extends S3Credentials {
 export type CredentialsResult =
 	{ ok: true; creds: LiveSyncCredentials } | { ok: false; reason: string };
 
+interface LiveSyncPluginShape {
+	/** LiveSync 1.0.x: the settings live on the core object. */
+	core?: { settings?: unknown };
+	/** Older LiveSync versions kept them on the plugin object. */
+	settings?: unknown;
+}
+
 interface PluginRegistry {
-	plugins?: { plugins?: Record<string, { settings?: unknown } | undefined> };
+	plugins?: { plugins?: Record<string, LiveSyncPluginShape | undefined> };
+}
+
+/** Pick the settings object out of the LiveSync plugin object; exported for tests. */
+export function settingsFromPlugin(plugin: unknown): unknown {
+	if (typeof plugin !== "object" || plugin === null) {
+		return undefined;
+	}
+	const p = plugin as LiveSyncPluginShape;
+	const core = p.core;
+	if (
+		typeof core === "object" &&
+		core !== null &&
+		core.settings !== undefined
+	) {
+		return core.settings;
+	}
+	return p.settings;
 }
 
 export function readLiveSyncSettings(app: App): unknown {
 	const registry = app as unknown as PluginRegistry;
-	return registry.plugins?.plugins?.[LIVESYNC_PLUGIN_ID]?.settings;
+	return settingsFromPlugin(registry.plugins?.plugins?.[LIVESYNC_PLUGIN_ID]);
 }
 
 /** Validate a LiveSync settings object; exported for tests. */

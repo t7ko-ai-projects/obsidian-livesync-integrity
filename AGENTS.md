@@ -15,7 +15,7 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   `fetch` (CORS). `esbuild.config.mjs` marks Node built-ins external so a stray import
   fails at load time instead of silently bundling.
 - Credentials come from LiveSync at run time (`src/livesync-credentials.ts`) and are never
-  persisted or logged. Reading `app.plugins.plugins["obsidian-livesync"].settings` is an
+  persisted or logged. Reading `app.plugins.plugins["obsidian-livesync"].core.settings` (`.settings` on older versions) is an
   undocumented internal; validate every field and fail with a reason.
 - Never test against a real vault or a real bucket; the manual plan uses a test vault and a
   test bucket (`docs/MANUAL-TEST-PLAN.md`). `npm test` runs on synthetic data only.

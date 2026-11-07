@@ -8,7 +8,10 @@ import {
 	encryptBytes,
 	hashFile,
 } from "../src/crypto/manifest-crypto";
-import { credentialsFromSettings } from "../src/livesync-credentials";
+import {
+	credentialsFromSettings,
+	settingsFromPlugin,
+} from "../src/livesync-credentials";
 import {
 	compileExclusions,
 	deviceIdFromKey,
@@ -266,4 +269,16 @@ test("LiveSync settings are validated field by field", () => {
 		credentialsFromSettings({ ...good, endpoint: "http://127.0.0.1:9000" })
 			.ok,
 	);
+});
+
+test("settingsFromPlugin finds the settings on the core (LiveSync 1.0.x) or the plugin", () => {
+	const onCore = { core: { settings: { remoteType: "MINIO" } } };
+	assert.deepEqual(settingsFromPlugin(onCore), { remoteType: "MINIO" });
+	const onPlugin = { settings: { remoteType: "MINIO" } };
+	assert.deepEqual(settingsFromPlugin(onPlugin), { remoteType: "MINIO" });
+	const coreWins = { core: { settings: { a: 1 } }, settings: { a: 2 } };
+	assert.deepEqual(settingsFromPlugin(coreWins), { a: 1 });
+	assert.equal(settingsFromPlugin({ core: {} }), undefined);
+	assert.equal(settingsFromPlugin(undefined), undefined);
+	assert.equal(settingsFromPlugin(null), undefined);
 });

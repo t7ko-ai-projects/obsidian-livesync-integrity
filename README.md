@@ -148,7 +148,7 @@ such as `(a+)+$` can take exponential time on some paths and stall the check.
 ## Limits
 
 - It reads LiveSync's settings through an undocumented internal
-  (`app.plugins.plugins["obsidian-livesync"].settings`). A LiveSync update may rename a
+  (`app.plugins.plugins["obsidian-livesync"].core.settings`, or `.settings` on older versions). A LiveSync update may rename a
   field; the plugin then reports the missing field and does nothing.
 - A check hashes the whole vault, so on a large vault it takes a while and reads every
   file. Keep the interval reasonable; each check costs one PUT, one LIST and one GET per

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- Fix "Not usable: Self-hosted LiveSync is not loaded or has no settings" with LiveSync
+  1.0.x, which keeps its settings on the core object rather than on the plugin object.
+  Both places are now read.
+
 ## 0.1.0
 
 - Daily digest (off by default): a modal with the files renamed, added, modified and
