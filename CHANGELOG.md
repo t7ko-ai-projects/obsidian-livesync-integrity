@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5
 
 - On a phone an overdue check starts the moment Obsidian opens or returns to the
   foreground, with no quiet period, since the app is rarely open for long.
