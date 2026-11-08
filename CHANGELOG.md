@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.4
 
 - A file with the same content under different paths on the two devices is reported as
   "moved, not yet confirmed" instead of two mismatches.
