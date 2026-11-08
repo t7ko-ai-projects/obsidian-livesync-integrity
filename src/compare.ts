@@ -18,6 +18,11 @@ export interface DeviceReport {
 	onlyThere: string[];
 	/** Paths skipped because one side changed inside the grace window. */
 	pending: number;
+	/** Files with the same content under different paths on the two sides
+	 * ("old -> new"): a move the other device has not reported yet. Not a
+	 * mismatch; it stays here until the move is confirmed or turns out to be
+	 * a real difference. */
+	moved: string[];
 }
 
 export interface IntegrityReport {
@@ -60,6 +65,7 @@ export function compareManifests(
 		onlyHere: [],
 		onlyThere: [],
 		pending: 0,
+		moved: [],
 	};
 	const paths = new Set([
 		...Object.keys(local.files),
@@ -91,7 +97,40 @@ export function compareManifests(
 			}
 		}
 	}
+	pairMoves(report, local, remote);
 	return report;
+}
+
+/**
+ * A move keeps the file's mtime, so the grace window does not protect it:
+ * the same content missing here and present there under another path is a
+ * move one side has not synced yet, not two mismatches. Paired by hash,
+ * one to one.
+ */
+function pairMoves(report: DeviceReport, local: Manifest, remote: Manifest) {
+	const thereByHash = new Map<string, string[]>();
+	for (const path of report.onlyThere) {
+		const hash = fileEntry(remote.files, path)?.h;
+		if (hash !== undefined) {
+			const list = thereByHash.get(hash) ?? [];
+			list.push(path);
+			thereByHash.set(hash, list);
+		}
+	}
+	const pairedHere = new Set<string>();
+	const pairedThere = new Set<string>();
+	for (const path of report.onlyHere) {
+		const hash = fileEntry(local.files, path)?.h;
+		const match =
+			hash === undefined ? undefined : thereByHash.get(hash)?.shift();
+		if (match !== undefined) {
+			pairedHere.add(path);
+			pairedThere.add(match);
+			report.moved.push(`${match} -> ${path}`);
+		}
+	}
+	report.onlyHere = report.onlyHere.filter((p) => !pairedHere.has(p));
+	report.onlyThere = report.onlyThere.filter((p) => !pairedThere.has(p));
 }
 
 export function mismatchCount(report: IntegrityReport): number {

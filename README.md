@@ -51,7 +51,10 @@ publishes no manifest and is simply absent from the reports.
 - **Command "Show daily digest"** opens the digest of vault changes (see below).
 
 A scheduled check also runs when the plugin loads after the interval has passed (for a PC
-that is not opened every day), once the vault has been quiet for the quiet period.
+that is not opened every day), once the vault has been quiet for the quiet period. On a
+phone the quiet period is capped at 2 minutes and the scheduler also wakes when Obsidian
+returns to the foreground, because Android freezes the plugin while the app is in the
+background and the app is rarely open for ten quiet minutes.
 
 ### What a report means
 
@@ -65,7 +68,10 @@ For every other device that has published a manifest, the report lists:
 A file is reported only when both sides have had the chance to settle: its modification
 time must be older than the grace window, counted back from the older of the two manifests.
 Files changed more recently are counted as "still inside the grace window" and will show
-up in a later check if they stay different. A file deleted on one device shows as "only on
+up in a later check if they stay different. A file with the same content under different
+paths on the two sides is listed as "moved, not yet confirmed" rather than as two
+mismatches, because a move keeps the modification time and so slips past the grace window;
+it clears once the other device publishes a manifest that reflects the move. A file deleted on one device shows as "only on
 that device" until the other device syncs the deletion and publishes a new manifest.
 
 The report's "Problems" list and the status bar's "problems" flag cover everything that

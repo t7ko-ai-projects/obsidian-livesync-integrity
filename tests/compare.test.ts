@@ -123,3 +123,31 @@ test("a remote file newer than the window stays pending on the remote side", () 
 	assert.deepEqual(report.onlyThere, []);
 	assert.equal(report.pending, 1);
 });
+
+test("the same content under different paths is a move, not two mismatches", () => {
+	const HOUR = 60 * MINUTE;
+	const local = manifest("pc", NOW, {
+		"Self-Help/Log.md": old("same"),
+		"here-only.md": old("x"),
+	});
+	const remote = manifest("phone", NOW - 18 * HOUR, {
+		"Untitled/Log.md": old("same"),
+		"there-only.md": old("y"),
+	});
+	const report = compareManifests(local, remote, {
+		now: NOW,
+		graceMs: GRACE,
+	});
+	assert.deepEqual(report.moved, ["Untitled/Log.md -> Self-Help/Log.md"]);
+	assert.deepEqual(report.onlyHere, ["here-only.md"]);
+	assert.deepEqual(report.onlyThere, ["there-only.md"]);
+	assert.equal(
+		mismatchCount({
+			createdAt: NOW,
+			localFileCount: 2,
+			devices: [report],
+			errors: [],
+		}),
+		2,
+	);
+});

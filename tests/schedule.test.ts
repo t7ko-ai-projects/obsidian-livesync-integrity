@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isRunDue, RETRY_MS } from "../src/schedule";
+import {
+	effectiveQuietMinutes,
+	isRunDue,
+	MOBILE_QUIET_MINUTES,
+	RETRY_MS,
+} from "../src/schedule";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -48,4 +53,10 @@ test("the back-off never exceeds the interval", () => {
 		lastAttemptAt: NOW - 16 * MINUTE,
 	};
 	assert.equal(isRunDue(short, NOW), true);
+});
+
+test("the quiet period is capped on mobile and untouched on desktop", () => {
+	assert.equal(effectiveQuietMinutes(10, false), 10);
+	assert.equal(effectiveQuietMinutes(10, true), MOBILE_QUIET_MINUTES);
+	assert.equal(effectiveQuietMinutes(1, true), 1);
 });

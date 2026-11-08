@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- A file with the same content under different paths on the two devices is reported as
+  "moved, not yet confirmed" instead of two mismatches.
+- On a phone the scheduled check waits at most 2 minutes of quiet, ticks every 15 s and
+  also runs when Obsidian returns to the foreground, so the phone actually publishes
+  manifests.
+
 ## 0.1.3
 
 - Clicking the status bar item opens the integrity report.

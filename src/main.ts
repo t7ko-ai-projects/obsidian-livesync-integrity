@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Platform, Plugin } from "obsidian";
 import { runIntegrityCheck } from "./check";
 import {
 	hasProblems,
@@ -10,7 +10,12 @@ import { isAutoDigestDue, markDigestSeen, noteDigestShown } from "./digest";
 import { runDigest } from "./digest-run";
 import { readLiveSyncCredentials } from "./livesync-credentials";
 import { compileExclusions, isValidDeviceId } from "./manifest";
-import { isRunDue } from "./schedule";
+import {
+	DESKTOP_TICK_MS,
+	effectiveQuietMinutes,
+	isRunDue,
+	MOBILE_TICK_MS,
+} from "./schedule";
 import {
 	DEFAULT_SETTINGS,
 	DEVICE_ID_STORAGE_KEY,
@@ -21,7 +26,6 @@ import { BaselineRecordedModal, DigestModal } from "./ui/digest-modal";
 import { ReportModal } from "./ui/report-modal";
 import { IntegritySettingTab } from "./ui/settings-tab";
 
-const TICK_MS = 60_000;
 const MINUTE = 60_000;
 /** A remote manifest older than this many intervals is stale. */
 const STALE_INTERVALS = 3;
@@ -86,8 +90,17 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 			this.registerEvent(this.app.vault.on("delete", touch));
 			this.registerEvent(this.app.vault.on("rename", touch));
 			this.registerInterval(
-				window.setInterval(() => void this.tick(), TICK_MS),
+				window.setInterval(
+					() => void this.tick(),
+					Platform.isMobile ? MOBILE_TICK_MS : DESKTOP_TICK_MS,
+				),
 			);
+			// Android freezes timers in the background; check when we return.
+			this.registerDomEvent(document, "visibilitychange", () => {
+				if (document.visibilityState === "visible") {
+					void this.tick();
+				}
+			});
 		});
 	}
 
@@ -120,7 +133,15 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		if (!s.scheduleEnabled || this.running) {
 			return;
 		}
-		if (isRunDue({ ...s, lastChangeAt: this.lastChangeAt }, Date.now())) {
+		const state = {
+			...s,
+			quietMinutes: effectiveQuietMinutes(
+				s.quietMinutes,
+				Platform.isMobile,
+			),
+			lastChangeAt: this.lastChangeAt,
+		};
+		if (isRunDue(state, Date.now())) {
 			await this.runCheck(false);
 		}
 	}
