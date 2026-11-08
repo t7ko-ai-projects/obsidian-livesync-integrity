@@ -101,6 +101,9 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 					void this.tick();
 				}
 			});
+			// Do not wait for the first tick: on a phone the app may be gone
+			// by then. On desktop the quiet period still applies.
+			void this.tick();
 		});
 	}
 

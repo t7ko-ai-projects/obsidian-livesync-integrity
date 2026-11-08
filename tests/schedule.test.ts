@@ -58,5 +58,14 @@ test("the back-off never exceeds the interval", () => {
 test("the quiet period is capped on mobile and untouched on desktop", () => {
 	assert.equal(effectiveQuietMinutes(10, false), 10);
 	assert.equal(effectiveQuietMinutes(10, true), MOBILE_QUIET_MINUTES);
-	assert.equal(effectiveQuietMinutes(1, true), 1);
+	assert.equal(
+		MOBILE_QUIET_MINUTES,
+		0,
+		"an overdue phone check starts at once",
+	);
+	assert.equal(
+		isRunDue({ ...base, quietMinutes: 0, lastChangeAt: NOW }, NOW),
+		true,
+		"a change this very moment does not hold a zero quiet period",
+	);
 });

@@ -71,9 +71,10 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   only there with the same hash are paired one to one into `moved` ("old -> new"), excluded
   from the mismatch count and shown muted in the report. A move keeps the mtime, so the
   grace window alone would flag it against an older manifest.
-- **Mobile scheduling**: the quiet period is capped at `MOBILE_QUIET_MINUTES` (2), the tick
-  is 15 s instead of 60 s, and a `visibilitychange` to visible runs a tick, because Android
-  freezes timers in the background and the app is seldom in the foreground for 10 minutes.
+- **Mobile scheduling**: no quiet period (`MOBILE_QUIET_MINUTES` is 0), a tick runs right
+  after layout ready and on every `visibilitychange` to visible, and the interval tick is
+  15 s, because the phone is typically open for seconds and Android freezes timers in the
+  background. The grace window, not the quiet period, keeps a check during sync honest.
 - **Scheduling survives missed days**: on every minute tick, a run is due when
   `now - lastRunAt >= interval`, and it waits until the vault has been quiet (no vault
   event) for the quiet period; plugin load counts as a change so LiveSync's startup sync

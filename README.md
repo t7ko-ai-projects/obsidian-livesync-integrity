@@ -52,9 +52,10 @@ publishes no manifest and is simply absent from the reports.
 
 A scheduled check also runs when the plugin loads after the interval has passed (for a PC
 that is not opened every day), once the vault has been quiet for the quiet period. On a
-phone the quiet period is capped at 2 minutes and the scheduler also wakes when Obsidian
-returns to the foreground, because Android freezes the plugin while the app is in the
-background and the app is rarely open for ten quiet minutes.
+phone there is no quiet period: an overdue check starts the moment Obsidian opens or
+returns to the foreground, because the app is typically open for seconds and Android
+freezes the plugin while it is in the background. Recent edits are covered by the grace
+window, so a check during sync does not produce false mismatches.
 
 ### What a report means
 

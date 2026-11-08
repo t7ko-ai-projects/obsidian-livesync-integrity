@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- On a phone an overdue check starts the moment Obsidian opens or returns to the
+  foreground, with no quiet period, since the app is rarely open for long.
+
 ## 0.1.4
 
 - A file with the same content under different paths on the two devices is reported as
