@@ -47,7 +47,7 @@ publishes no manifest and is simply absent from the reports.
   and whether to be notified about new mismatches.
 - **Command "Run integrity check now"** runs a check immediately.
 - **Command "Show integrity report"** opens the last report. The status bar shows the
-  mismatch count of the last report.
+  mismatch count of the last report; clicking it opens the report too.
 - **Command "Show daily digest"** opens the digest of vault changes (see below).
 
 A scheduled check also runs when the plugin loads after the interval has passed (for a PC

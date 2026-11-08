@@ -49,6 +49,9 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		await this.loadSettings();
 		this.deviceId = this.loadDeviceId();
 		this.statusBar = this.addStatusBarItem();
+		this.statusBar.addClass("t7li-status");
+		this.statusBar.setAttribute("aria-label", "Open the integrity report");
+		this.registerDomEvent(this.statusBar, "click", () => this.showReport());
 		this.updateStatusBar();
 
 		this.addCommand({

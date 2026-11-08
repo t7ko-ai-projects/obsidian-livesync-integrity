@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+- Clicking the status bar item opens the integrity report.
+
 ## 0.1.2
 
 - The daily digest no longer resets its baseline when shown. "Mark as seen" in the digest
