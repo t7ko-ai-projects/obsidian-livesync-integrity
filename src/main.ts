@@ -31,6 +31,13 @@ const MINUTE = 60_000;
 const STALE_INTERVALS = 3;
 /** Wait after load before the daily digest scans, so the vault is indexed. */
 const DIGEST_DELAY_MS = 30_000;
+/** How the automatic digest waits for a running check or for LiveSync. */
+const DIGEST_RETRY_MS = 5_000;
+const DIGEST_MAX_WAIT_MS = 10 * MINUTE;
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 /** Never hash the configuration folder, whatever the user's patterns say. */
 function configFolderPattern(configDir: string): RegExp {
@@ -44,10 +51,15 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 	deviceId = "";
 	private statusBar: HTMLElement | null = null;
 	private running = false;
+	private runningKind: "check" | "digest" | null = null;
 	/** Last vault change; plugin load counts as one, so startup sync settles. */
 	private lastChangeAt = Date.now();
 	/** Failure text of the last scheduled run, shown once until it changes. */
 	private lastScheduledFailure = "";
+	/** The automatic digest is waiting or scanning; scheduled checks hold. */
+	private digestPending = false;
+	/** Callbacks for open windows that show the running state. */
+	private readonly listeners = new Set<() => void>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -77,6 +89,7 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 
 		this.app.workspace.onLayoutReady(() => {
 			if (isAutoDigestDue(this.settings, Date.now())) {
+				this.digestPending = true;
 				window.setTimeout(
 					() => void this.showDigest(false),
 					DIGEST_DELAY_MS,
@@ -133,7 +146,7 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 	/** Scheduled run when due, backed off after failures, and the vault quiet. */
 	private async tick(): Promise<void> {
 		const s = this.settings;
-		if (!s.scheduleEnabled || this.running) {
+		if (!s.scheduleEnabled || this.running || this.digestPending) {
 			return;
 		}
 		const state = {
@@ -172,7 +185,7 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 				`Ignoring invalid exclusion pattern(s): ${invalid.join(", ")}`,
 			);
 		}
-		this.running = true;
+		this.setRunning("check");
 		this.settings.lastAttemptAt = Date.now();
 		await this.saveSettings();
 		this.setStatus("Integrity: running");
@@ -202,10 +215,12 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 			if (!manual) {
 				this.lastScheduledFailure = message;
 			}
-			this.setStatus("Integrity: failed");
+			this.settings.lastFailure = { at: Date.now(), message };
+			await this.saveSettings();
+			this.updateStatusBar();
 		} finally {
 			progress?.hide();
-			this.running = false;
+			this.setRunning(null);
 		}
 	}
 
@@ -219,6 +234,7 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		const fresh = keys.filter((k) => !known.has(k));
 		s.lastRunAt = report.createdAt;
 		s.lastReport = report;
+		s.lastFailure = null;
 		s.knownMismatchKeys = keys;
 		for (const device of report.devices) {
 			const before = s.seenManifests[device.deviceId] ?? 0;
@@ -249,24 +265,46 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 	 * on the first run (nothing to show yet) or when the user marks the digest
 	 * as seen; closing the window leaves it alone. */
 	async showDigest(manual: boolean): Promise<void> {
-		if (this.running) {
-			if (manual) {
-				new Notice(
-					"Integrity check is already running; try again later",
-				);
+		try {
+			await this.showDigestInner(manual);
+		} finally {
+			if (!manual && this.digestPending) {
+				this.digestPending = false;
+				this.notify();
+				void this.tick();
 			}
+		}
+	}
+
+	/** The automatic show waits (bounded) for a running check to end and for
+	 * LiveSync to be ready, instead of giving up silently at start-up. */
+	private async showDigestInner(manual: boolean): Promise<void> {
+		const deadline = Date.now() + DIGEST_MAX_WAIT_MS;
+		let creds = readLiveSyncCredentials(this.app);
+		while (
+			!manual &&
+			(this.running || !creds.ok) &&
+			Date.now() < deadline
+		) {
+			await sleep(DIGEST_RETRY_MS);
+			creds = readLiveSyncCredentials(this.app);
+		}
+		if (this.running) {
+			new Notice(
+				manual
+					? "Integrity check is already running; try again later"
+					: "Daily digest skipped: the integrity check is still running. Use the Show daily digest command later.",
+				10_000,
+			);
 			return;
 		}
-		const creds = readLiveSyncCredentials(this.app);
 		if (!creds.ok) {
-			if (manual) {
-				new Notice(`Daily digest skipped: ${creds.reason}`, 10_000);
-			}
+			new Notice(`Daily digest skipped: ${creds.reason}`, 10_000);
 			return;
 		}
 		const { regexes } = compileExclusions(this.settings.excludePatterns);
 		regexes.push(configFolderPattern(this.app.vault.configDir));
-		this.running = true;
+		this.setRunning("digest");
 		const progress = manual
 			? new Notice("Daily digest: starting", 0)
 			: null;
@@ -308,7 +346,7 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 			);
 		} finally {
 			progress?.hide();
-			this.running = false;
+			this.setRunning(null);
 		}
 	}
 
@@ -325,7 +363,30 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 	}
 
 	showReport(): void {
-		new ReportModal(this.app, this.settings.lastReport).open();
+		new ReportModal(this.app, this).open();
+	}
+
+	/** What is running right now, if anything. */
+	runningTask(): "check" | "digest" | null {
+		return this.runningKind;
+	}
+
+	/** Subscribe to running-state and report changes; returns unsubscribe. */
+	onStateChange(callback: () => void): () => void {
+		this.listeners.add(callback);
+		return () => this.listeners.delete(callback);
+	}
+
+	private setRunning(kind: "check" | "digest" | null): void {
+		this.running = kind !== null;
+		this.runningKind = kind;
+		this.notify();
+	}
+
+	private notify(): void {
+		for (const callback of this.listeners) {
+			callback();
+		}
 	}
 
 	private setStatus(text: string): void {
@@ -334,6 +395,11 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 
 	private updateStatusBar(): void {
 		const report = this.settings.lastReport;
+		const failure = this.settings.lastFailure;
+		if (failure && (!report || failure.at > report.createdAt)) {
+			this.setStatus("Integrity: failed");
+			return;
+		}
 		if (!report) {
 			this.setStatus("Integrity: not checked");
 			return;

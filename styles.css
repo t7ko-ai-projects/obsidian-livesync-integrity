@@ -26,3 +26,11 @@
 .t7li-status {
 	cursor: pointer;
 }
+.t7li-report-actions {
+	display: flex;
+	gap: 0.5em;
+	margin-bottom: 0.8em;
+}
+.t7li-running {
+	color: var(--text-accent);
+}

@@ -1,4 +1,4 @@
-import { type App, Modal } from "obsidian";
+import { type App, ButtonComponent, Modal } from "obsidian";
 import type { DeviceReport, IntegrityReport } from "../compare";
 import { mismatchCount } from "../compare";
 
@@ -17,25 +17,75 @@ export function formatAge(ms: number): string {
 	return `${Math.round(hours / 24)} days ago`;
 }
 
+/** What the report window needs from the plugin. */
+export interface ReportSource {
+	settings: {
+		lastReport: IntegrityReport | null;
+		lastFailure: { at: number; message: string } | null;
+	};
+	runningTask(): "check" | "digest" | null;
+	runCheck(manual: boolean): Promise<void>;
+	showDigest(manual: boolean): Promise<void>;
+	onStateChange(callback: () => void): () => void;
+}
+
 export class ReportModal extends Modal {
+	private unsubscribe: (() => void) | null = null;
+
 	constructor(
 		app: App,
-		private readonly report: IntegrityReport | null,
+		private readonly source: ReportSource,
 	) {
 		super(app);
 	}
 
 	onOpen(): void {
+		this.setTitle("Integrity report");
+		this.unsubscribe = this.source.onStateChange(() => this.render());
+		this.render();
+	}
+
+	private render(): void {
 		const { contentEl } = this;
 		contentEl.empty();
-		this.setTitle("Integrity report");
-		if (!this.report) {
+		const running = this.source.runningTask();
+		const actions = contentEl.createDiv({ cls: "t7li-report-actions" });
+		new ButtonComponent(actions)
+			.setButtonText("Check now")
+			.setCta()
+			.setDisabled(running !== null)
+			.onClick(() => void this.source.runCheck(true));
+		new ButtonComponent(actions)
+			.setButtonText("Show digest")
+			.setDisabled(running !== null)
+			.onClick(() => {
+				this.close();
+				void this.source.showDigest(true);
+			});
+		if (running) {
+			contentEl.createEl("p", {
+				text:
+					running === "check"
+						? "An integrity check is running right now..."
+						: "A digest scan is running right now...",
+				cls: "t7li-running",
+			});
+		}
+		const failure = this.source.settings.lastFailure;
+		const report = this.source.settings.lastReport;
+		if (failure && (!report || failure.at > report.createdAt)) {
+			contentEl.createEl("p", {
+				text: `Last check failed ${formatAge(Date.now() - failure.at)}: ${failure.message}. The results below are from the last successful check.`,
+				cls: "t7li-bad",
+			});
+		}
+		if (!report) {
 			contentEl.createEl("p", {
 				text: "No check has run yet. Run the integrity check first.",
 			});
 			return;
 		}
-		const r = this.report;
+		const r = report;
 		const total = mismatchCount(r);
 		contentEl.createEl("p", {
 			text: `Checked ${formatAge(Date.now() - r.createdAt)}: ${r.localFileCount} local files, ${r.devices.length} other device(s), ${total} mismatch(es).`,
@@ -107,6 +157,8 @@ export class ReportModal extends Modal {
 	}
 
 	onClose(): void {
+		this.unsubscribe?.();
+		this.unsubscribe = null;
 		this.contentEl.empty();
 	}
 }

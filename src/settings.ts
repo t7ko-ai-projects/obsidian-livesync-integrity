@@ -23,6 +23,8 @@ export interface IntegritySettings {
 	/** Start of the last run, successful or not; failed runs back off. */
 	lastAttemptAt: number;
 	lastReport: IntegrityReport | null;
+	/** The last run's failure, cleared by the next successful run. */
+	lastFailure: { at: number; message: string } | null;
 	/** Mismatch keys already shown, so a notice fires only for new ones. */
 	knownMismatchKeys: string[];
 	/** Newest manifest time seen per other device, to notice rollbacks. */
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: IntegritySettings = {
 	lastRunAt: 0,
 	lastAttemptAt: 0,
 	lastReport: null,
+	lastFailure: null,
 	knownMismatchKeys: [],
 	seenManifests: {},
 	digestEnabled: false,
