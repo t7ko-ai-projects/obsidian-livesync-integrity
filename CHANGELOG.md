@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+- The integrity report shows when the last check failed and why, says when a check or
+  digest is running, and has Check now and Show digest buttons.
+- The daily digest at start-up waits for a running check or for LiveSync instead of
+  silently skipping, and scheduled checks wait until the digest is done.
+
 ## 0.1.5
 
 - On a phone an overdue check starts the moment Obsidian opens or returns to the
