@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A mismatch is reported only when two consecutive checks see it; a first sighting is
+  listed as unconfirmed, not counted and not notified. A check that runs before LiveSync
+  has pulled the other device's changes no longer produces false mismatches.
+
 ## 0.1.6
 
 - The integrity report shows when the last check failed and why, says when a check or

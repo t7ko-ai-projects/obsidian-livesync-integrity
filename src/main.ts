@@ -2,8 +2,10 @@ import { Notice, Platform, Plugin } from "obsidian";
 import { runIntegrityCheck } from "./check";
 import {
 	hasProblems,
+	confirmMismatches,
 	mismatchCount,
 	mismatchKeys,
+	unconfirmedCount,
 	type IntegrityReport,
 } from "./compare";
 import { isAutoDigestDue, markDigestSeen, noteDigestShown } from "./digest";
@@ -229,6 +231,11 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		manual: boolean,
 	): Promise<void> {
 		const s = this.settings;
+		const seenNow = mismatchKeys(report);
+		confirmMismatches(
+			report,
+			new Set([...s.lastSeenMismatchKeys, ...s.knownMismatchKeys]),
+		);
 		const keys = mismatchKeys(report);
 		const known = new Set(s.knownMismatchKeys);
 		const fresh = keys.filter((k) => !known.has(k));
@@ -236,6 +243,7 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		s.lastReport = report;
 		s.lastFailure = null;
 		s.knownMismatchKeys = keys;
+		s.lastSeenMismatchKeys = seenNow;
 		for (const device of report.devices) {
 			const before = s.seenManifests[device.deviceId] ?? 0;
 			s.seenManifests[device.deviceId] = Math.max(
@@ -246,9 +254,11 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 		await this.saveSettings();
 		this.updateStatusBar();
 		const total = mismatchCount(report);
+		const unconfirmed = unconfirmedCount(report);
 		if (manual) {
 			new Notice(
 				`Integrity check done: ${total} mismatch(es) across ${report.devices.length} other device(s)` +
+					(unconfirmed ? `, ${unconfirmed} unconfirmed` : "") +
 					(report.errors.length
 						? `, ${report.errors.length} problem(s)`
 						: ""),
@@ -405,14 +415,17 @@ export default class LiveSyncIntegrityPlugin extends Plugin {
 			return;
 		}
 		const total = mismatchCount(report);
-		const problems = hasProblems(report) ? ", problems" : "";
+		const unconfirmed = unconfirmedCount(report);
+		const suffix =
+			(unconfirmed ? `, ${unconfirmed} unconfirmed` : "") +
+			(hasProblems(report) ? ", problems" : "");
 		if (total > 0) {
-			this.setStatus(`Integrity: ${total} mismatches${problems}`);
+			this.setStatus(`Integrity: ${total} mismatches${suffix}`);
 		} else if (report.devices.length === 0) {
-			this.setStatus(`Integrity: no other device${problems}`);
+			this.setStatus(`Integrity: no other device${suffix}`);
 		} else {
 			this.setStatus(
-				`Integrity: OK (${report.devices.length} devices${problems})`,
+				`Integrity: OK (${report.devices.length} devices${suffix})`,
 			);
 		}
 	}

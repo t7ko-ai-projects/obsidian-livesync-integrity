@@ -105,6 +105,36 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   either is missing the entry still opens the file and a notice says so. Nothing else of
   LiveSync's internals is touched.
 
+- **Second-sighting rule** (`confirmMismatches` in `compare.ts`, applied in
+  `storeReport`): a mismatch key counts only if the previous check saw it
+  (`lastSeenMismatchKeys` or `knownMismatchKeys` in `data.json`); first sightings go to
+  `DeviceReport.unconfirmed`, are shown muted, not counted and not notified. Zero extra
+  load; real drift is reported one interval later. The daily digest is unaffected.
+
+## Things to watch for
+
+Corner cases met in use. Each is handled as noted; the list is here so the next one is
+recognised quickly.
+
+- **A check before LiveSync caught up** (2026-11-10): the PC started, the scheduler ran
+  after 10 quiet vault minutes, but LiveSync's S3 journal pull has its own timer and had
+  not run, so six files edited on the phone the night before were hashed as their old
+  copies and reported as "different content". Mtimes could not tell: the old copies were
+  weeks old and the phone's edits were older than the grace window at the phone's manifest.
+  "Check now" cleared it. Handled by the second-sighting rule above. Quiet vault time says
+  nothing about whether LiveSync has pulled; do not try to read LiveSync's sync state.
+- **The phone never published a manifest** (2026-11-08): the 10 minute quiet period was
+  never reached on a phone that is open for seconds, and Android freezes timers in the
+  background. Handled by the zero quiet period and the tick on load and on
+  `visibilitychange` (mobile scheduling above).
+- **A move looked like two mismatches** (2026-11-08): a rename keeps the mtime, so a file
+  moved on the PC and not yet reflected in the phone's manifest was "only here" plus "only
+  there". Handled by `pairMoves`.
+- **Still open**: a device whose manifest is older than every change (stale, three
+  intervals) is flagged as a problem but its mismatches are still listed; a change that
+  took longer than the grace window to sync is reported once and then clears; a file
+  edited on both devices (a LiveSync conflict) is real drift and should stay reported.
+
 ## Checks before a commit
 
 `npm test`, `npm run lint`, `npm run format:check`, `npm run build`, `git diff --check`,

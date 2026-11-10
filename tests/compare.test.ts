@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compareManifests, mismatchCount, mismatchKeys } from "../src/compare";
+import {
+	compareManifests,
+	confirmMismatches,
+	mismatchCount,
+	mismatchKeys,
+	unconfirmedCount,
+} from "../src/compare";
 import {
 	MANIFEST_FORMAT,
 	type Manifest,
@@ -150,4 +156,57 @@ test("the same content under different paths is a move, not two mismatches", () 
 		}),
 		2,
 	);
+});
+
+test("a mismatch counts only when the previous check saw it too", () => {
+	const build = () => {
+		const local = manifest("pc", NOW, {
+			"stale-copy.md": old("v1"),
+			"real-drift.md": old("a"),
+			"mine.md": old("m"),
+		});
+		const remote = manifest("phone", NOW - 2 * 60 * MINUTE, {
+			"stale-copy.md": old("v2"),
+			"real-drift.md": old("b"),
+			"theirs.md": old("t"),
+		});
+		const device = compareManifests(local, remote, {
+			now: NOW,
+			graceMs: GRACE,
+		});
+		return {
+			createdAt: NOW,
+			localFileCount: 3,
+			devices: [device],
+			errors: [],
+		};
+	};
+
+	// First check: the previous check had seen only real-drift.md.
+	const first = build();
+	const seenBefore = new Set(["phone|differ|real-drift.md"]);
+	confirmMismatches(first, seenBefore);
+	assert.deepEqual(first.devices[0]?.differing, ["real-drift.md"]);
+	assert.deepEqual(first.devices[0]?.onlyHere, []);
+	assert.deepEqual(first.devices[0]?.onlyThere, []);
+	assert.deepEqual(first.devices[0]?.unconfirmed, [
+		"different content: stale-copy.md",
+		"only on this device: mine.md",
+		"only on that device: theirs.md",
+	]);
+	assert.equal(mismatchCount(first), 1);
+	assert.equal(unconfirmedCount(first), 3);
+	assert.deepEqual(mismatchKeys(first), ["phone|differ|real-drift.md"]);
+
+	// Next check: everything the first one saw is now confirmed.
+	const second = build();
+	confirmMismatches(second, new Set(mismatchKeys(build())));
+	assert.equal(mismatchCount(second), 4);
+	assert.equal(unconfirmedCount(second), 0);
+
+	// An old report without the field is tolerated.
+	const legacy = build();
+	delete (legacy.devices[0] as Partial<(typeof legacy.devices)[0]>)
+		.unconfirmed;
+	assert.equal(unconfirmedCount(legacy), 0);
 });

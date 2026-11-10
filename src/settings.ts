@@ -25,8 +25,11 @@ export interface IntegritySettings {
 	lastReport: IntegrityReport | null;
 	/** The last run's failure, cleared by the next successful run. */
 	lastFailure: { at: number; message: string } | null;
-	/** Mismatch keys already shown, so a notice fires only for new ones. */
+	/** Confirmed mismatch keys already shown, so a notice fires only for new ones. */
 	knownMismatchKeys: string[];
+	/** Every mismatch key the last check saw, confirmed or not; a key seen
+	 * again in the next check becomes confirmed. */
+	lastSeenMismatchKeys: string[];
 	/** Newest manifest time seen per other device, to notice rollbacks. */
 	seenManifests: Record<string, number>;
 	/** Show a digest of vault changes on the first load of each day. */
@@ -50,6 +53,7 @@ export const DEFAULT_SETTINGS: IntegritySettings = {
 	lastReport: null,
 	lastFailure: null,
 	knownMismatchKeys: [],
+	lastSeenMismatchKeys: [],
 	seenManifests: {},
 	digestEnabled: false,
 	digestBaseline: null,

@@ -75,6 +75,13 @@ mismatches, because a move keeps the modification time and so slips past the gra
 it clears once the other device publishes a manifest that reflects the move. A file deleted on one device shows as "only on
 that device" until the other device syncs the deletion and publishes a new manifest.
 
+A mismatch is counted only when two consecutive checks see it. The first sighting is listed
+under "seen for the first time" in the report and in the status bar as "unconfirmed", with
+no notice. This is because a check that runs before LiveSync has pulled the other device's
+latest changes hashes stale copies, which look exactly like drift; such entries vanish on
+the next check by themselves, while real drift stays and is reported one interval later.
+"Check now" after a sync is the quick way to confirm or clear them.
+
 The report's "Problems" list and the status bar's "problems" flag cover everything that
 makes a result suspect rather than a plain mismatch:
 

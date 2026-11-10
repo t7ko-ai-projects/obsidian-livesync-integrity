@@ -23,6 +23,10 @@ export interface DeviceReport {
 	 * mismatch; it stays here until the move is confirmed or turns out to be
 	 * a real difference. */
 	moved: string[];
+	/** Mismatches seen for the first time in this check ("kind: path"). They
+	 * are not counted or notified until the next check sees them again: a
+	 * vault that LiveSync has not caught up yet looks exactly like drift. */
+	unconfirmed: string[];
 }
 
 export interface IntegrityReport {
@@ -66,6 +70,7 @@ export function compareManifests(
 		onlyThere: [],
 		pending: 0,
 		moved: [],
+		unconfirmed: [],
 	};
 	const paths = new Set([
 		...Object.keys(local.files),
@@ -131,6 +136,36 @@ function pairMoves(report: DeviceReport, local: Manifest, remote: Manifest) {
 	}
 	report.onlyHere = report.onlyHere.filter((p) => !pairedHere.has(p));
 	report.onlyThere = report.onlyThere.filter((p) => !pairedThere.has(p));
+}
+
+/**
+ * Second-sighting rule: a mismatch counts only when the previous check saw
+ * the same key. First sightings move to `unconfirmed`. This costs nothing
+ * and removes the false alarms of a check that ran before LiveSync had
+ * pulled the other device's changes; real drift persists and is reported
+ * one interval later.
+ */
+export function confirmMismatches(
+	report: IntegrityReport,
+	previousKeys: ReadonlySet<string>,
+): void {
+	for (const d of report.devices) {
+		const keep = (kind: string, label: string, paths: string[]) =>
+			paths.filter((p) => {
+				if (previousKeys.has(`${d.deviceId}|${kind}|${p}`)) {
+					return true;
+				}
+				d.unconfirmed.push(`${label}: ${p}`);
+				return false;
+			});
+		d.differing = keep("differ", "different content", d.differing);
+		d.onlyHere = keep("here", "only on this device", d.onlyHere);
+		d.onlyThere = keep("there", "only on that device", d.onlyThere);
+	}
+}
+
+export function unconfirmedCount(report: IntegrityReport): number {
+	return report.devices.reduce((n, d) => n + (d.unconfirmed ?? []).length, 0);
 }
 
 export function mismatchCount(report: IntegrityReport): number {

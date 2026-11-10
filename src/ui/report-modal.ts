@@ -144,6 +144,17 @@ export class ReportModal extends Modal {
 		if (!any) {
 			section.createEl("div", { text: "No mismatches." });
 		}
+		const unconfirmed = device.unconfirmed ?? [];
+		if (unconfirmed.length > 0) {
+			section.createEl("div", {
+				text: `Seen for the first time; counted only if the next check still sees them (${unconfirmed.length})`,
+				cls: "t7li-muted",
+			});
+			const list = section.createEl("ul", { cls: "t7li-report-list" });
+			for (const item of unconfirmed) {
+				list.createEl("li", { text: item, cls: "t7li-muted" });
+			}
+		}
 		if (device.moved.length > 0) {
 			section.createEl("div", {
 				text: `Moved, not yet confirmed by that device (${device.moved.length})`,
