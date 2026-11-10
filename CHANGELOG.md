@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.7
 
 - A mismatch is reported only when two consecutive checks see it; a first sighting is
   listed as unconfirmed, not counted and not notified. A check that runs before LiveSync
