@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- A file renamed, moved or deleted while a check or the daily digest is scanning the
+  vault is skipped instead of failing the whole run with "no such file or directory".
+  The next scan picks it up under its new path.
+
 ## 0.1.7
 
 - A mismatch is reported only when two consecutive checks see it; a first sighting is

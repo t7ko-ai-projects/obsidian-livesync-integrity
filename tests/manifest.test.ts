@@ -12,7 +12,9 @@ import {
 	credentialsFromSettings,
 	settingsFromPlugin,
 } from "../src/livesync-credentials";
+import type { App } from "obsidian";
 import {
+	buildManifest,
 	compileExclusions,
 	deviceIdFromKey,
 	isExcluded,
@@ -281,4 +283,47 @@ test("settingsFromPlugin finds the settings on the core (LiveSync 1.0.x) or the 
 	assert.equal(settingsFromPlugin({ core: {} }), undefined);
 	assert.equal(settingsFromPlugin(undefined), undefined);
 	assert.equal(settingsFromPlugin(null), undefined);
+});
+
+test("a file renamed or deleted during the scan is skipped, other read errors fail", async () => {
+	const file = (path: string) => ({
+		path,
+		stat: { size: 1, mtime: 1, ctime: 1 },
+	});
+	const kept = file("a.md");
+	const renamed = file("img/old name.jpg");
+	const broken = file("b.md");
+	const byPath = new Map([kept, renamed, broken].map((f) => [f.path, f]));
+	const app = (files: (typeof kept)[]) =>
+		({
+			vault: {
+				getFiles: () => files,
+				getFileByPath: (p: string) => byPath.get(p) ?? null,
+				readBinary: (f: typeof kept) => {
+					if (f === renamed) {
+						byPath.delete(f.path);
+						return Promise.reject(
+							Object.assign(new Error("ENOENT: no such file"), {
+								code: "ENOENT",
+							}),
+						);
+					}
+					if (f === broken) {
+						return Promise.reject(
+							new Error("EACCES: permission denied"),
+						);
+					}
+					return Promise.resolve(utf8("x").buffer as ArrayBuffer);
+				},
+			},
+		}) as unknown as App;
+	const options = {
+		deviceId: DEV,
+		deviceName: "pc",
+		exclusions: [],
+		hashKey: await deriveHashKey("pass"),
+	};
+	const manifest = await buildManifest(app([kept, renamed]), options);
+	assert.deepEqual(Object.keys(manifest.files), ["a.md"]);
+	await assert.rejects(buildManifest(app([kept, broken]), options), /EACCES/);
 });

@@ -105,6 +105,39 @@ export interface ManifestBuildOptions {
 	onProgress?: (done: number, total: number) => void;
 }
 
+/**
+ * Read a file listed at the start of a scan, or null when it has gone since (renamed,
+ * moved or deleted while the scan ran): the next scan sees it under its new path. Any
+ * other read error still fails the run.
+ */
+async function readIfStillPresent(
+	app: App,
+	file: TFile,
+	path: string,
+): Promise<ArrayBuffer | null> {
+	try {
+		return await app.vault.readBinary(file);
+	} catch (e) {
+		const vanished =
+			isNotFoundError(e) || app.vault.getFileByPath(path) !== file;
+		if (vanished) {
+			return null;
+		}
+		throw e;
+	}
+}
+
+function isNotFoundError(e: unknown): boolean {
+	if (typeof e !== "object" || e === null) {
+		return false;
+	}
+	const { code, message } = e as { code?: unknown; message?: unknown };
+	return (
+		code === "ENOENT" ||
+		(typeof message === "string" && message.includes("ENOENT"))
+	);
+}
+
 /** Hash every non-excluded vault file. Reads only; never writes. */
 export async function buildManifest(
 	app: App,
@@ -119,12 +152,16 @@ export async function buildManifest(
 	) as Record<string, ManifestEntry>;
 	let done = 0;
 	for (const file of files) {
-		const content = await app.vault.readBinary(file);
-		entries[file.path] = {
-			h: await hashFile(options.hashKey, content),
-			s: file.stat.size,
-			m: file.stat.mtime,
-		};
+		const path = file.path;
+		const { size, mtime } = file.stat;
+		const content = await readIfStillPresent(app, file, path);
+		if (content !== null) {
+			entries[path] = {
+				h: await hashFile(options.hashKey, content),
+				s: size,
+				m: mtime,
+			};
+		}
 		done += 1;
 		options.onProgress?.(done, files.length);
 	}

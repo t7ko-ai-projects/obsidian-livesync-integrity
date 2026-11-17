@@ -123,6 +123,11 @@ recognised quickly.
   weeks old and the phone's edits were older than the grace window at the phone's manifest.
   "Check now" cleared it. Handled by the second-sighting rule above. Quiet vault time says
   nothing about whether LiveSync has pulled; do not try to read LiveSync's sync state.
+- **A file renamed during a scan failed the whole run** (2026-11-16): "Show digest" right
+  after renaming files ended in `ENOENT` on the old path, because `buildManifest` lists the
+  files first and reads them afterwards. Handled in `readIfStillPresent` (`manifest.ts`): a
+  file that is gone (ENOENT, or no longer at its listed path) is skipped for this scan and
+  picked up under its new path by the next one; any other read error still fails the run.
 - **The phone never published a manifest** (2026-11-08): the 10 minute quiet period was
   never reached on a phone that is open for seconds, and Android freezes timers in the
   background. Handled by the zero quiet period and the tick on load and on
