@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.9
 
 - Closing LiveSync's history window opened from the daily digest returns to the
   digest instead of closing both.

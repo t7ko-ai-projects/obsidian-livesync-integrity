@@ -1,6 +1,6 @@
 {
 	"name": "livesync-integrity",
-	"version": "0.1.8",
+	"version": "0.1.9",
 	"description": "Cross-device file-hash integrity check for vaults synced with Self-hosted LiveSync in S3 journal mode",
 	"main": "main.js",
 	"type": "module",
