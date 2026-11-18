@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.10
 
 - On a wide window the digest shows one line per change, the path and its details in
   two columns; a narrow window keeps the details under the path. The digest opens wider
