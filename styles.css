@@ -48,6 +48,34 @@
 	font-size: var(--font-smaller);
 	padding-left: 1.2em;
 }
+/* Wider than a default dialog so the table layout below fits; phones keep theirs. */
+body:not(.is-phone) .modal.t7li-digest-modal:not(.t7li-maximized) {
+	width: min(1100px, 95vw);
+	max-width: 95vw;
+}
+.t7li-digest-group {
+	container-type: inline-size;
+}
+.t7li-digest-entry {
+	overflow-wrap: anywhere;
+}
+/* Wide: one line per entry, path and details in two columns. Narrow: details below. */
+@container (min-width: 640px) {
+	.t7li-digest-list {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		column-gap: 1.5em;
+		row-gap: 0.2em;
+		list-style: none;
+		padding-left: 0;
+	}
+	.t7li-digest-list > li {
+		display: contents;
+	}
+	.t7li-digest-detail {
+		white-space: nowrap;
+	}
+}
 .t7li-maximize {
 	position: absolute;
 	top: var(--t7li-maximize-top, var(--size-4-2));

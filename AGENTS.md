@@ -115,7 +115,11 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   remembered for the session (in memory). No button on phones.
 - **Digest groups are collapsible** (`<details>`): all expanded up to
   `DIGEST_EXPANDED_MAX` (14) entries in total, all collapsed above it; no inner scroll
-  areas.
+  areas. Layout by CSS container query on the group (not the viewport, so maximizing
+  switches it): from 640px wide the list is a two-column grid (`li` is
+  `display: contents`, path wraps, details stay on one line); narrower, the details
+  sit under the path. The digest modal is `min(1100px, 95vw)` wide except on phones and
+  when maximized.
 
 - **Second-sighting rule** (`confirmMismatches` in `compare.ts`, applied in
   `storeReport`): a mismatch key counts only if the previous check saw it

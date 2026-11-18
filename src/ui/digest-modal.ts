@@ -93,6 +93,7 @@ export class DigestModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		this.setTitle("Daily digest");
+		this.modalEl.addClass("t7li-digest-modal");
 		addMaximizeButton(this.modalEl, false);
 		// LiveSync's history opens on top of the digest; give it the same toggle.
 		this.stopWatching = watchStackedModals(this.modalEl, (modal) => {
@@ -152,7 +153,10 @@ export class DigestModal extends Modal {
 				? "Deleted files cannot be opened; this opens LiveSync's file history picker, where you pick the file yourself."
 				: "Open the file and its LiveSync history",
 		);
-		item.createEl("div", { text: describeEntry(entry), cls: "t7li-muted" });
+		item.createEl("div", {
+			text: describeEntry(entry),
+			cls: "t7li-digest-detail t7li-muted",
+		});
 		link.addEventListener("click", (event) => {
 			event.preventDefault();
 			// The digest stays open underneath, so closing the history returns here.

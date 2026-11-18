@@ -106,7 +106,9 @@ that device. A rename is a deleted path whose content reappeared under a new pat
 detected only when the content is unchanged; a note that was moved and edited shows as
 deleted plus added. Entries are sorted newest first within each group. Each group can be
 collapsed and expanded by its heading: with fewer than 15 changes in total all groups
-start expanded, otherwise all start collapsed.
+start expanded, otherwise all start collapsed. On a wide window each change takes one
+line, path on the left and details on the right; on a narrow one the details go under the
+path.
 
 Click an entry to open the file and LiveSync's document history (its revision slider and
 diff) for it. The history opens on top of the digest, and closing it brings you back to
