@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Closing LiveSync's history window opened from the daily digest returns to the
+  digest instead of closing both.
+- The digest and the history window opened from it have a button that makes them fill
+  the app window (not on phones).
+- Digest groups are collapsible instead of scrolling: all expanded with fewer than 15
+  changes, all collapsed otherwise.
+
 ## 0.1.8
 
 - A file renamed, moved or deleted while a check or the daily digest is scanning the

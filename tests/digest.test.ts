@@ -22,7 +22,12 @@ import {
 	type ManifestEntry,
 } from "../src/manifest";
 import type { RequestFn } from "../src/s3/client";
-import { describeEntry, formatDelta, formatSize } from "../src/ui/digest-modal";
+import {
+	describeEntry,
+	digestGroupsStartOpen,
+	formatDelta,
+	formatSize,
+} from "../src/ui/digest-modal";
 
 const T0 = 1_800_000_000_000;
 const HOUR = 3_600_000;
@@ -389,4 +394,10 @@ test("a digest run with an unreachable bucket still lists changes, unattributed"
 	);
 	assert.equal(result.notes.length, 1);
 	assert.match(result.notes[0] ?? "", /offline/);
+});
+
+test("digest groups start expanded under 15 entries and collapsed from 15 on", () => {
+	assert.equal(digestGroupsStartOpen(0), true);
+	assert.equal(digestGroupsStartOpen(14), true);
+	assert.equal(digestGroupsStartOpen(15), false);
 });

@@ -104,12 +104,19 @@ the size (and the size change for a modified file), the modification time and, w
 another device's manifest newer than the last digest carries the same change, the name of
 that device. A rename is a deleted path whose content reappeared under a new path, so it is
 detected only when the content is unchanged; a note that was moved and edited shows as
-deleted plus added. Entries are sorted newest first within each group.
+deleted plus added. Entries are sorted newest first within each group. Each group can be
+collapsed and expanded by its heading: with fewer than 15 changes in total all groups
+start expanded, otherwise all start collapsed.
 
 Click an entry to open the file and LiveSync's document history (its revision slider and
-diff) for it. A deleted file cannot be opened, so its entry opens LiveSync's file history
+diff) for it. The history opens on top of the digest, and closing it brings you back to
+the digest. A deleted file cannot be opened, so its entry opens LiveSync's file history
 picker instead, where you pick the file yourself. Without LiveSync the entry just opens
 the file and a notice says history is unavailable.
+
+On desktop and tablets the digest and the history window have a button next to their close
+button that makes them fill the Obsidian window, so long paths and diffs are easier to
+read; click it again to restore the size.
 
 Viewing the digest changes nothing: close it with X or Escape and the same digest can be
 reopened any number of times. **Mark as seen** saves the current scan as the new baseline,

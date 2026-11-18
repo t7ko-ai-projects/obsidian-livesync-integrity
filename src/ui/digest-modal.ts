@@ -1,5 +1,16 @@
 import { type App, ButtonComponent, Modal, Notice, setTooltip } from "obsidian";
 import { DIGEST_KINDS, digestGroup, type DigestEntry } from "../digest";
+import { addMaximizeButton, watchStackedModals } from "./maximize";
+
+/** Up to this many entries all groups start expanded; above it all start collapsed. */
+export const DIGEST_EXPANDED_MAX = 14;
+
+export function digestGroupsStartOpen(total: number): boolean {
+	return total <= DIGEST_EXPANDED_MAX;
+}
+
+/** Remembered for this session: history windows reopen maximized once one was. */
+let historyMaximized = false;
 
 /** LiveSync command ids (checked against v1.0.45, commit 24a1bfc1). */
 export const LIVESYNC_HISTORY_COMMAND = "obsidian-livesync:livesync-history";
@@ -64,6 +75,8 @@ export function describeEntry(entry: DigestEntry): string {
 
 /** The digest itself; `notes` explain incomplete attribution. */
 export class DigestModal extends Modal {
+	private stopWatching: (() => void) | null = null;
+
 	constructor(
 		app: App,
 		private readonly entries: DigestEntry[],
@@ -80,8 +93,15 @@ export class DigestModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		this.setTitle("Daily digest");
+		addMaximizeButton(this.modalEl, false);
+		// LiveSync's history opens on top of the digest; give it the same toggle.
+		this.stopWatching = watchStackedModals(this.modalEl, (modal) => {
+			addMaximizeButton(modal, historyMaximized, (maximized) => {
+				historyMaximized = maximized;
+			});
+		});
 		contentEl.createEl("p", {
-			text: `${this.entries.length} change(s) since ${new Date(this.since).toLocaleString()}. Click an entry to open the file and its LiveSync history. Closing keeps this digest; "Mark as seen" starts the next one from now.`,
+			text: `${this.entries.length} change(s) since ${new Date(this.since).toLocaleString()}. Click an entry to open the file and its LiveSync history; closing the history comes back here. Closing keeps this digest; "Mark as seen" starts the next one from now.`,
 			cls: "t7li-muted",
 		});
 		new ButtonComponent(contentEl.createDiv({ cls: "t7li-digest-actions" }))
@@ -94,16 +114,20 @@ export class DigestModal extends Modal {
 		if (this.entries.length === 0) {
 			contentEl.createEl("p", { text: "No changes." });
 		}
+		const open = digestGroupsStartOpen(this.entries.length);
 		for (const kind of DIGEST_KINDS) {
 			const group = digestGroup(this.entries, kind);
 			if (group.length === 0) {
 				continue;
 			}
-			const section = contentEl.createDiv({ cls: "t7li-report-section" });
-			section.createEl("h3", {
+			const section = contentEl.createEl("details", {
+				cls: "t7li-digest-group",
+			});
+			section.open = open;
+			section.createEl("summary", {
 				text: `${GROUP_TITLES[kind]} (${group.length})`,
 			});
-			const list = section.createEl("ul", { cls: "t7li-report-list" });
+			const list = section.createEl("ul", { cls: "t7li-digest-list" });
 			for (const entry of group) {
 				this.renderEntry(list, entry);
 			}
@@ -131,7 +155,7 @@ export class DigestModal extends Modal {
 		item.createEl("div", { text: describeEntry(entry), cls: "t7li-muted" });
 		link.addEventListener("click", (event) => {
 			event.preventDefault();
-			this.close();
+			// The digest stays open underneath, so closing the history returns here.
 			void this.openEntry(entry);
 		});
 	}
@@ -159,6 +183,8 @@ export class DigestModal extends Modal {
 	}
 
 	onClose(): void {
+		this.stopWatching?.();
+		this.stopWatching = null;
 		this.contentEl.empty();
 	}
 }

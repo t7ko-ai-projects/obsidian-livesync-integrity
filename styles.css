@@ -34,3 +34,33 @@
 .t7li-running {
 	color: var(--text-accent);
 }
+.t7li-digest-group {
+	margin-bottom: 0.6em;
+}
+.t7li-digest-group > summary {
+	cursor: pointer;
+	font-weight: var(--font-semibold);
+	font-size: var(--h3-size);
+	margin-bottom: 0.3em;
+}
+.t7li-digest-list {
+	font-family: var(--font-monospace);
+	font-size: var(--font-smaller);
+	padding-left: 1.2em;
+}
+.t7li-maximize {
+	position: absolute;
+	top: var(--t7li-maximize-top, var(--size-4-2));
+	right: var(--t7li-maximize-right, var(--size-4-12));
+}
+.modal.t7li-maximized {
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	border-radius: 0;
+}
+/* LiveSync's history caps its diff at 280px; let it grow when maximized. */
+.modal.t7li-maximized .op-scrollable {
+	max-height: none;
+}

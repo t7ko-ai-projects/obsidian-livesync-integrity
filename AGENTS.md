@@ -102,8 +102,20 @@ are in `AGENTS.local.md` (imported by `CLAUDE.md`); keep anything personal there
   files). Checked against LiveSync v1.0.45, commit 24a1bfc1,
   `src/modules/features/ModuleObsidianDocumentHistory.ts`. They are run through
   `app.commands.executeCommandById` (undocumented internal, probed before use); when
-  either is missing the entry still opens the file and a notice says so. Nothing else of
-  LiveSync's internals is touched.
+  either is missing the entry still opens the file and a notice says so. The digest stays
+  open while LiveSync's history (or its file picker) opens on top, so closing the history
+  returns to the digest. Nothing else of LiveSync's internals is touched, except DOM and
+  CSS below.
+- **Maximize toggle** (`src/ui/maximize.ts`): the digest and any `.modal` stacked on top
+  of it while it is open (found with a `MutationObserver` on the body, stopped on close)
+  get a button left of the close button that makes the modal fill the app window. The
+  history window's diff is LiveSync's `.op-scrollable`, capped at 280px; `styles.css`
+  lifts that cap only inside a maximized modal. If LiveSync renames the class, the
+  window still maximizes, only the diff stays short. The history's maximized state is
+  remembered for the session (in memory). No button on phones.
+- **Digest groups are collapsible** (`<details>`): all expanded up to
+  `DIGEST_EXPANDED_MAX` (14) entries in total, all collapsed above it; no inner scroll
+  areas.
 
 - **Second-sighting rule** (`confirmMismatches` in `compare.ts`, applied in
   `storeReport`): a mismatch key counts only if the previous check saw it
