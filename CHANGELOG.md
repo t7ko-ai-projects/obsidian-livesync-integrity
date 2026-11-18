@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.11
 
 - The digest has an "Expand all" button next to "Mark as seen"; once every group is
   open it reads "Collapse all".
