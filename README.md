@@ -108,7 +108,8 @@ deleted plus added. Entries are sorted newest first within each group. Each grou
 collapsed and expanded by its heading: with fewer than 15 changes in total all groups
 start expanded, otherwise all start collapsed. On a wide window each change takes one
 line, path on the left and details on the right; on a narrow one the details go under the
-path.
+path. **Expand all** next to **Mark as seen** opens every group; once all are open it
+reads **Collapse all**.
 
 Click an entry to open the file and LiveSync's document history (its revision slider and
 diff) for it. The history opens on top of the digest, and closing it brings you back to

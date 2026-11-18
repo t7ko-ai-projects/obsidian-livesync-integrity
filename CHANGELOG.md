@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The digest has an "Expand all" button next to "Mark as seen"; once every group is
+  open it reads "Collapse all".
+
 ## 0.1.10
 
 - On a wide window the digest shows one line per change, the path and its details in

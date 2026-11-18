@@ -21,6 +21,8 @@
 	cursor: pointer;
 }
 .t7li-digest-actions {
+	display: flex;
+	gap: 0.5em;
 	margin-bottom: 0.8em;
 }
 .t7li-status {

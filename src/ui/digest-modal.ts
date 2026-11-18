@@ -105,7 +105,8 @@ export class DigestModal extends Modal {
 			text: `${this.entries.length} change(s) since ${new Date(this.since).toLocaleString()}. Click an entry to open the file and its LiveSync history; closing the history comes back here. Closing keeps this digest; "Mark as seen" starts the next one from now.`,
 			cls: "t7li-muted",
 		});
-		new ButtonComponent(contentEl.createDiv({ cls: "t7li-digest-actions" }))
+		const actions = contentEl.createDiv({ cls: "t7li-digest-actions" });
+		new ButtonComponent(actions)
 			.setButtonText("Mark as seen")
 			.setCta()
 			.onClick(() => {
@@ -116,6 +117,7 @@ export class DigestModal extends Modal {
 			contentEl.createEl("p", { text: "No changes." });
 		}
 		const open = digestGroupsStartOpen(this.entries.length);
+		const sections: HTMLDetailsElement[] = [];
 		for (const kind of DIGEST_KINDS) {
 			const group = digestGroup(this.entries, kind);
 			if (group.length === 0) {
@@ -125,6 +127,7 @@ export class DigestModal extends Modal {
 				cls: "t7li-digest-group",
 			});
 			section.open = open;
+			sections.push(section);
 			section.createEl("summary", {
 				text: `${GROUP_TITLES[kind]} (${group.length})`,
 			});
@@ -136,6 +139,32 @@ export class DigestModal extends Modal {
 		for (const note of this.notes) {
 			contentEl.createEl("p", { text: note, cls: "t7li-bad" });
 		}
+		if (sections.length > 0) {
+			this.addExpandToggle(actions, sections);
+		}
+	}
+
+	/** "Expand all" while any group is collapsed, "Collapse all" once all are open. */
+	private addExpandToggle(
+		actions: HTMLElement,
+		sections: HTMLDetailsElement[],
+	): void {
+		const button = new ButtonComponent(actions);
+		const allOpen = (): boolean => sections.every((s) => s.open);
+		const refresh = (): void => {
+			button.setButtonText(allOpen() ? "Collapse all" : "Expand all");
+		};
+		button.onClick(() => {
+			const expand = !allOpen();
+			for (const section of sections) {
+				section.open = expand;
+			}
+			refresh();
+		});
+		for (const section of sections) {
+			section.addEventListener("toggle", refresh);
+		}
+		refresh();
 	}
 
 	private renderEntry(list: HTMLElement, entry: DigestEntry): void {
