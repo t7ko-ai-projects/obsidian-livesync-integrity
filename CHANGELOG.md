@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.12
+
+- The digest lists files alphabetically by path within each group (case-insensitive,
+  numbers in natural order) instead of newest first.
+
 ## 0.1.11
 
 - The digest has an "Expand all" button next to "Mark as seen"; once every group is
