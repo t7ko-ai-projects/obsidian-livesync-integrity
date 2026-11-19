@@ -148,8 +148,14 @@ function attributeAbsent(
 
 /**
  * Diff the live scan against the baseline. A deleted path whose hash matches
- * an added path becomes one rename. Sorted by mtime, newest first.
+ * an added path becomes one rename. Sorted alphabetically by path
+ * (case-insensitive, numbers in natural order).
  */
+const pathCollator = new Intl.Collator(undefined, {
+	numeric: true,
+	sensitivity: "base",
+});
+
 export function computeDigest(
 	baseline: DigestBaseline,
 	scan: Record<string, ManifestEntry>,
@@ -240,7 +246,11 @@ export function computeDigest(
 			});
 		}
 	}
-	entries.sort((a, b) => b.mtime - a.mtime || (a.path < b.path ? -1 : 1));
+	entries.sort(
+		(a, b) =>
+			pathCollator.compare(a.path, b.path) ||
+			(a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+	);
 	return entries;
 }
 

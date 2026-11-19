@@ -55,7 +55,7 @@ const baseline: DigestBaseline = {
 	},
 };
 
-test("digest lists added, modified and deleted files, newest first", () => {
+test("digest lists added, modified and deleted files, sorted by path", () => {
 	const entries = computeDigest(baseline, {
 		"keep.md": e("k", 10, T0 - HOUR),
 		"edit.md": e("e2", 130, T0 + 2 * HOUR),
@@ -65,14 +65,14 @@ test("digest lists added, modified and deleted files, newest first", () => {
 	assert.deepEqual(
 		entries.map((x) => [x.kind, x.path]),
 		[
-			["added", "new.md"],
 			["modified", "edit.md"],
 			["deleted", "gone.md"],
+			["added", "new.md"],
 		],
 	);
-	assert.equal(entries[1]?.sizeDelta, 30);
-	assert.equal(entries[2]?.size, 5);
-	assert.equal(entries[2]?.mtime, T0 - 2 * HOUR);
+	assert.equal(entries[0]?.sizeDelta, 30);
+	assert.equal(entries[1]?.size, 5);
+	assert.equal(entries[1]?.mtime, T0 - 2 * HOUR);
 	assert.equal(digestGroup(entries, "renamed").length, 0);
 });
 
@@ -363,8 +363,8 @@ test("a digest run records a baseline first, then diffs and attributes without u
 	assert.deepEqual(
 		second.entries?.map((x) => [x.kind, x.path, x.device]),
 		[
-			["added", "b.md", undefined],
 			["modified", "a.md", "Phone"],
+			["added", "b.md", undefined],
 		],
 	);
 	assert.deepEqual(second.notes, []);

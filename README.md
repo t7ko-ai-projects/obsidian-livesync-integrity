@@ -104,7 +104,7 @@ the size (and the size change for a modified file), the modification time and, w
 another device's manifest newer than the last digest carries the same change, the name of
 that device. A rename is a deleted path whose content reappeared under a new path, so it is
 detected only when the content is unchanged; a note that was moved and edited shows as
-deleted plus added. Entries are sorted newest first within each group. Each group can be
+deleted plus added. Entries are sorted alphabetically by path within each group. Each group can be
 collapsed and expanded by its heading: with fewer than 15 changes in total all groups
 start expanded, otherwise all start collapsed. On a wide window each change takes one
 line, path on the left and details on the right; on a narrow one the details go under the
